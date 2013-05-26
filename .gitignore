@@ -1,4 +1,6 @@
 box/*
+*.par
+*.top
 *.pdb
 *.tgz
 *.psf
