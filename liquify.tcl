@@ -15,14 +15,6 @@ namespace eval ::liquify {
 
 	# Simulation parameters
 	variable options
-	set options(niter) 100
-	set options(pdbfile) ""
-	set options(psffile) ""
-	set options(cube) 0
-	set options(reject) 0
-	foreach n {x y z} {
-		set options($n) 10
-	}
 }
 
 # Build a window to allow user input of parameters
@@ -30,7 +22,6 @@ namespace eval ::liquify {
 proc ::liquify::build_gui {} {
 	variable w
 	variable options
-	parray options
 	wm title $w "Setup Molecular Liquid"
 
 	set twidth 50 ;# text box width
@@ -61,7 +52,9 @@ proc ::liquify::build_gui {} {
 	
 	set row 0
 	foreach n {x y z} {
-		set e [entry $w.f2.$n-e1 -textvariable ::liquify::options($n) -width $nwidth]
+		set e [entry $w.f2.$n-e1 -textvariable ::liquify::options($n) -width $nwidth \
+		-validate key -vcmd {string is int %P}]
+		#	-validate key -vcmd {string is int %P}]
 		set l [label $w.f2.$n-l1 -text "$n"]
 		grid $l -column 0 -row $row
 		grid $e -column 1 -row $row
@@ -78,7 +71,8 @@ proc ::liquify::build_gui {} {
 
 	set l [label $w.f4.l1 -text "Number of iterations"]
 	set s [spinbox $w.f4.s1 -textvariable ::liquify::options(niter) \
-		-from 100 -to 1000 -increment 50 -width $nwidth]
+		-from 100 -to 1000 -increment 50 -width $nwidth -validate key \
+		-vcmd {string is int %P}]
 	grid $l -column 0 -row 0
 	grid $s -column 1 -row 0
 
@@ -113,12 +107,10 @@ proc ::liquify::build_gui {} {
 	set cmd "::liquify::populate"
 	set b [button $w.f5.b1 -text "Fill!" -command $cmd]
 	grid $b -column 0 -row 0
-}
 
-# temp
-proc ::liquify::print_options {} {
-	variable options
-	parray options
+	set cmd "::liquify::reset"
+	set b [button $w.f5.b2 -text "Reset" -command $cmd]
+	grid $b -column 1 -row 0
 }
 
 # Save new PDB and PSF files
@@ -128,23 +120,74 @@ proc ::liquify::save_files {} {
 
 # Start populating the box
 proc ::liquify::populate {} {
+	variable options
 	vmdcon -info "Reset display field..."
-	::liquify::reset
+	# Remove any molecules currently loaded
+	::liquify::clear_mols
 	vmdcon -info "Populating..."
-	foreach n {pdb psf} {
-		set bigname [string toupper $n]
-		vmdcon -info "Loading $bigname file..."
-		set err [::liquify::add_mol $::liquify::options($n)]
-		if {$err} {
+	# Add new molecule
+	vmdcon -info "Loading PBD file \{$options(pdb)\}..."
+	if [catch {mol new $options(pdb) type pdb} err] {
+		vmdcon -info "Halting box fill!"
+		return 1
+	}
+	vmdcon -info "...done"
+	# Load structure information into new molecule
+	vmdcon -info "Loading PSF data into new molecule..."
+	if [catch {mol addfile $options(psf) type psf} err] {
+		vmdcon -info "Halting box fill!"
+		return 1
+	}
+	vmdcon -info "...done"
+
+	# Check box dimensions
+	# values will be ints (entry validation)
+	if $options(cube) {
+		foreach i {y z} {
+			set options($i) $options(x)
+		}
+	}
+	foreach i {x y z} {
+		if {$options($i) <= 0} {
+			vmdcon -err "Box dimensions must be greater than 0!"
 			vmdcon -info "Halting box fill!"
 			return 1
 		}
-		vmdcon -info "$bigname loaded successfully"
+	}
+	# no bounds on iterations?
+	# start replicating molecules
+	for {set i 0} {$i < $options(niter)} {incr i} {
+		set i $i
+	}
+	vmdcon -info "Finished molecule replication"
+}
+
+# Clear all input and loaded molecules
+proc ::liquify::reset {} {
+	variable options
+	::liquify::clear_mols
+	::liquify::set_defaults
+}
+
+# Reset input fields to default
+proc ::liquify::set_defaults {} {
+	variable options
+	set options(niter) 100
+	set options(pdb) "/home/leif/src/liquify/thiophene/thiophene.pdb"
+	set options(psf) "/home/leif/src/liquify/thiophene/thiophene.psf"
+	set options(cube) 0
+	set options(reject) 0
+	foreach n {x y z} {
+		set options($n) 10
 	}
 }
 
+
 # Unload all molecules
-proc ::liquify::reset {} {
+# Reasoning: for setting up liquids -> no other molecules
+# can just delete a few after to put in another foreign molecule
+# if desired
+proc ::liquify::clear_mols {} {
 	vmdcon -info "Removing [molinfo num] molecules"
 	set idlist [molinfo list]
 	foreach id $idlist {
@@ -155,14 +198,11 @@ proc ::liquify::reset {} {
 
 # VMD menu calls this function when selected
 proc ::liquify_tk {} {
+	::liquify::set_defaults
 	::liquify::build_gui
 	return $liquify::w
 }
 
-proc ::liquify::add_mol {pdbfile} {
-	# Use VMD file handling
-	return [catch {mol addfile $pdbfile} err]
-}
 # Need to validate user input
 proc ::liquify::validate_input {} {
 	variable options
