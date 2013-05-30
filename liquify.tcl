@@ -1,5 +1,13 @@
+#
+#
+#
 # liquidgen plugin for VMD
 # Setup a Molecular Liquid Simulation 
+#
+#
+#
+#
+#
 
 package provide liquify 1.0
 package require psfgen
@@ -17,8 +25,9 @@ namespace eval ::liquify {
 	variable options
 
 	# Constants
-	#variable PI
+	variable PI
 	#set PI $math::constants::pi
+	set PI 3.1415926
 }
 
 # Build a window to allow user input of parameters
@@ -85,6 +94,12 @@ proc ::liquify::build_gui {} {
 	grid $l -column 0 -row 1
 	grid $c -column 1 -row 1
 
+	set l [label $w.f4.l3 -text "Density estimate\n(molecules/vol)"]
+	set e [entry $w.f4.e1 -textvariable ::liquify::options(density) \
+	-width $nwidth -validate key -vcmd {string is double %P}]
+	grid $l -column 0 -row 2
+	grid $e -column 1 -row 2
+
 	# Save new PDB and PSF files
 	# Click button save -> prompt for directory and name
 	grid [labelframe $w.f3 -text "Save New Data"] -columnspan 2 -rowspan 1
@@ -117,19 +132,28 @@ proc ::liquify::build_gui {} {
 	grid $b -column 1 -row 0
 }
 
+#
 # Save new PDB and PSF files
-proc ::liquify::save_files {} {
-	puts "saving files...maybe"
+# 
+proc ::liquify::save_files {name} {
+	# TODO catch errors
+	writepdb $name.pdb
+	writepsf $name.psf
 }
 
+#
 # Start populating the box
+#
 proc ::liquify::populate {} {
-	variable atoms
+	variable PI
 	variable options
+
 	vmdcon -info "Reset display field..."
+
 	# Remove any molecules currently loaded
 	::liquify::clear_mols
 	vmdcon -info "Populating..."
+
 	# Add new molecule
 	vmdcon -info "Loading PBD file \{$options(pdb)\}..."
 	if [catch {mol new $options(pdb) type pdb} err] {
@@ -145,7 +169,7 @@ proc ::liquify::populate {} {
 	}
 	vmdcon -info "...done"
 	topology $options(top)
-	set parentid [molinfo top]
+
 	# Check box dimensions
 	# values will be ints (entry validation)
 	if $options(cube) {
@@ -162,14 +186,52 @@ proc ::liquify::populate {} {
 	}
 	
 	# Retrive info from parent molecule
-	set atoms [atomselect top all]
-	set resids [lsort -unique [$atoms get resid]]
-	set resnames [lsort -unique [$atoms get resname]]
-	set atomnames [$atoms get name]
-	set coords [join [$atoms get {name x y z}]]
+	set atoms [atomselect top all] ;# Select all atoms
+	set diam [vecdist {*}[measure minmax $atoms]] ;# Estimate molecular diameter
+	set radius [expr $diam / 2.0] ;# Molecular radius
+	set resnames [lsort -unique [$atoms get resname]] ;# Residue names
+	mol delete [molinfo top]
+	# Estimate number of molecules based on geometry
+	set vol_box [expr $options(x) * $options(y) * $options(z)]
+	set vol_sphere [expr 4.0 * $PI * ($radius**3) / 3.0]
+	set num_mols [expr ($vol_box * $options(density)) / $vol_sphere]
+	set num_mols [expr round($num_mols)]
+	# TODO Need to find a way around this
+	if {$num_mols > 999} {
+		vmdcon -warn "Too many molecules (>999) would mess up segname. Halting."
+		return 1
+	}
+
 	# Replicate parent molecule
-	for {set i 1} {$i < $options(niter)} {incr i} {
-		set segname S$i
+	::liquify::generate_blanks $num_mols $resnames
+
+	# It seems necessary to write to file and reload XXX
+	::liquify::save_files tmp
+
+	mol delete [molinfo top]
+	mol load psf tmp.psf pdb tmp.pdb
+
+	# Scatter molecules randomly around in the box
+	::liquify::scatter_molecules $radius $com
+
+	# Use pbctools to draw periodic box
+	pbc set "$options(x) $options(y) $options(z)" -all
+	pbc box -center origin ;# draw box
+
+	::liquify::save_files tmp
+
+	vmdcon -info "Finished molecule replication"
+}
+
+#
+# Make n "blank" copies of parent molecule
+# blank -> unassigned coordinates
+# 
+proc ::liquify::generate_blanks {n resnames} {
+	variable options
+
+	for {set i 0} {$i < $n} {incr i} {
+		set segname S[format %03i $i]
 		segment $segname {
 			first NONE
 			last NONE
@@ -178,43 +240,74 @@ proc ::liquify::populate {} {
 			}
 		}
 		coordpdb $options(pdb) $segname
+	}
+}
 
-		# It seems necessary to write to file in order to get
-		# segment recognized XXX
-		set tempid [molinfo top]
-		writepdb tmp.pdb
-		writepsf tmp.psf
-		mol delete	$tempid
-		mol load psf tmp.psf pdb tmp.pdb
+#
+# Set random coordinates for every molecule present
+# Separation by segname
+#
+proc ::liquify::scatter_molecules {diam} {
+	variable options
+	# radius: estimated molecule radius
 
+	set allatoms [atomselect top all]
+	set segnames [lsort -unique [$allatoms get segname]]
+
+	foreach segname $segnames {
 		set atoms [atomselect top "segname $segname"]
-		foreach n {x y z} {
-			$atoms move [transaxis $n [::liquify::random_angle]]
-		}
-		$atoms move [transoffset [::liquify::random_xyz]]
-		set data [join [$atoms get {segid resid name x y z}]]
-		foreach {segid resid name x y z} $data {
+		set com [measure center $atoms weight mass] ;# Center of mass
+		set old_xyz [join [$atoms get {name x y z}]]
+		set new_xyz {}
+		set overlap 1
+		set failures 0
+
+		while {overlap} {
+			incr failures
+			foreach n {x y z} {
+				$atoms move [transaxis $n [::liquify::random_angle]]
+			}
+			$atoms move [transoffset [::liquify::random_xyz]]
+			set new_xyz [join [$atoms get {segid resid name x y z}]]
+			set overlap 0
+
+			foreach seg $segnames {
+				if {$seg == $segname} continue ;# skip self-comparison
+
+				set atoms2 [atomselect top "segname $seg"]
+				set com2 [measure center $atoms2 weight mass]
+				set dr [vecdist $com $com2]
+				if {$options(reject) && $dr >= $diam} {
+					puts "dr >= diam: $dr, $diam (no further comparison)"
+					continue
+				}
+				puts "Thorough check for overlap"
+				# TODO
+			}
+		} 
+
+		foreach {segid resid name x y z} $new_xyz {
 			coord $segid $resid $name "$x $y $z"
 		}
 	}
-
-	# Use pbctools to draw periodic box
-	pbc set "$options(x) $options(y) $options(z)" -all
-	pbc box -center origin ;# draw box
-	mol delete $parentid
-	writepdb tmp.pdb
-	writepsf tmp.psf
-	vmdcon -info "Finished molecule replication"
 }
 
+#
+#
+#
+
+#
 # Clear all input and loaded molecules
+#
 proc ::liquify::reset {} {
 	variable options
 	::liquify::clear_mols
 	::liquify::set_defaults
 }
 
+#
 # Reset input fields to default
+#
 proc ::liquify::set_defaults {} {
 	variable options
 	set options(niter) 10
@@ -222,12 +315,15 @@ proc ::liquify::set_defaults {} {
 	set options(psf) "/home/leif/src/liquify/thiophene/thiophene.psf"
 	set options(cube) 0
 	set options(reject) 0
+	set options(density) 0.74 ;# hexagonal close packing for spheres
 	foreach n {x y z} {
-		set options($n) 75
+		set options($n) 25
 	}
 }
 
+#
 # Return {x y z} list of random points within periodic box
+# 
 proc ::liquify::random_xyz {} {
 	variable options
 	set dr {}
@@ -235,18 +331,22 @@ proc ::liquify::random_xyz {} {
 		set val [expr ($options($n) * rand()) - ($options($n) / 2.0)]
 		lappend dr $val
 	}
-	puts "DR: $dr"
 	return $dr
 }
 
+#
+#
+#
 proc ::liquify::random_angle {} {
 	return [expr (360.0 * rand())]
 }
 
+#
 # Unload all molecules
 # Reasoning: for setting up liquids -> no other molecules
 # can just delete a few after to put in another foreign molecule
 # if desired
+#
 proc ::liquify::clear_mols {} {
 	vmdcon -info "Removing [molinfo num] molecules"
 	set idlist [molinfo list]
@@ -257,20 +357,19 @@ proc ::liquify::clear_mols {} {
 	vmdcon -info "...done"
 }
 
+#
 # VMD menu calls this function when selected
+#
 proc ::liquify_tk {} {
 	::liquify::set_defaults
 	::liquify::build_gui
 	return $liquify::w
 }
 
+#
 # Need to validate user input
+#
 proc ::liquify::validate_input {} {
 	variable options
 	puts "Input validation..."
 }
-# PBC
-# ER
-	#grid [button $w.f1.b4 -text "Load" \
-	-command {mol new $psffile type psf first 0 last -1 step 1 waitfor 1}] \
-	-column 3 -row 1
