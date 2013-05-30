@@ -183,11 +183,15 @@ proc ::liquify::populate {} {
 			}
 		}
 		coordpdb $options(pdb) $segname
+
+		# It seems necessary to write to file in order to get
+		# segment recognized XXX
 		set tempid [molinfo top]
 		writepdb tmp.pdb
 		writepsf tmp.psf
 		mol delete	$tempid
 		mol load psf tmp.psf pdb tmp.pdb
+
 		set atoms [atomselect top "segname $segname"]
 		foreach n {x y z} {
 			$atoms move [transaxis $n [::liquify::random_angle]]
@@ -220,7 +224,6 @@ proc ::liquify::populate {} {
 proc ::liquify::reset {} {
 	variable options
 	::liquify::clear_mols
-	resetpsf
 	::liquify::set_defaults
 }
 
@@ -263,6 +266,7 @@ proc ::liquify::clear_mols {} {
 	foreach id $idlist {
 		mol delete $id
 	}
+	resetpsf
 	vmdcon -info "...done"
 }
 
