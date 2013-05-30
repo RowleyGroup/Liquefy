@@ -161,11 +161,6 @@ proc ::liquify::populate {} {
 		}
 	}
 	
-	# Setup random translation and rotation
-	set tmat [transoffset {5 5 5}]
-	set rx [transaxis x 90 deg]
-	set ry [transaxis y 90 deg]
-	set rz [transaxis z 90 deg]
 	# Retrive info from parent molecule
 	set atoms [atomselect top all]
 	set resids [lsort -unique [$atoms get resid]]
@@ -203,14 +198,6 @@ proc ::liquify::populate {} {
 		}
 	}
 
-	# update coordinates stored by psfgen otherwise old coordinates will
-	# be written to pdb file
-	set atoms [atomselect top all]
-	set data [join [$atoms get {segid resid name x y z}]]
-	foreach {segid resid name x y z} $data {
-		#puts "$segid $resid $name $x $y $z"
-		coord $segid $resid $name "$x $y $z"
-	}
 	# Use pbctools to draw periodic box
 	pbc set "$options(x) $options(y) $options(z)" -all
 	pbc box -center origin ;# draw box
