@@ -2,8 +2,8 @@
 # Setup a Molecular Liquid Simulation 
 
 package provide liquify 1.0
-#package require psfgen
-#package require namdgui
+package require psfgen
+package require pbctools
 
 # Setup namespace to prevent plugin conflicts
 namespace eval ::liquify {
@@ -15,6 +15,10 @@ namespace eval ::liquify {
 
 	# Simulation parameters
 	variable options
+
+	# Constants
+	#variable PI
+	#set PI $math::constants::pi
 }
 
 # Build a window to allow user input of parameters
@@ -35,7 +39,7 @@ proc ::liquify::build_gui {} {
 	grid [labelframe $w.f1 -text "Load Molecule"] -columnspan 2 -rowspan 1
 
 	set row 0
-	foreach n {pdb psf} {
+	foreach n {pdb psf top} {
 		set bigname [string toupper $n]
 		set l [label $w.f1.$n-l1 -text "$bigname File"]
 		set e [entry $w.f1.$n-e1 -width $twidth -textvariable ::liquify::options($n)] 
@@ -120,6 +124,7 @@ proc ::liquify::save_files {} {
 
 # Start populating the box
 proc ::liquify::populate {} {
+	variable atoms
 	variable options
 	vmdcon -info "Reset display field..."
 	# Remove any molecules currently loaded
@@ -139,7 +144,8 @@ proc ::liquify::populate {} {
 		return 1
 	}
 	vmdcon -info "...done"
-
+	topology $options(top)
+	set parentid [molinfo top]
 	# Check box dimensions
 	# values will be ints (entry validation)
 	if $options(cube) {
@@ -154,11 +160,59 @@ proc ::liquify::populate {} {
 			return 1
 		}
 	}
-	# no bounds on iterations?
-	# start replicating molecules
-	for {set i 0} {$i < $options(niter)} {incr i} {
-		set i $i
+	
+	# Setup random translation and rotation
+	set tmat [transoffset {5 5 5}]
+	set rx [transaxis x 90 deg]
+	set ry [transaxis y 90 deg]
+	set rz [transaxis z 90 deg]
+	# Retrive info from parent molecule
+	set atoms [atomselect top all]
+	set resids [lsort -unique [$atoms get resid]]
+	set resnames [lsort -unique [$atoms get resname]]
+	set atomnames [$atoms get name]
+	set coords [join [$atoms get {name x y z}]]
+	# Replicate parent molecule
+	for {set i 1} {$i < $options(niter)} {incr i} {
+		set segname S$i
+		segment $segname {
+			first NONE
+			last NONE
+			foreach resname $resnames {
+				residue 1 $resname
+			}
+		}
+		coordpdb $options(pdb) $segname
+		set tempid [molinfo top]
+		writepdb tmp.pdb
+		writepsf tmp.psf
+		mol delete	$tempid
+		mol load psf tmp.psf pdb tmp.pdb
+		set atoms [atomselect top "segname $segname"]
+		foreach n {x y z} {
+			$atoms move [transaxis $n [::liquify::random_angle]]
+		}
+		$atoms move [transoffset [::liquify::random_xyz]]
+		set data [join [$atoms get {segid resid name x y z}]]
+		foreach {segid resid name x y z} $data {
+			coord $segid $resid $name "$x $y $z"
+		}
 	}
+
+	# update coordinates stored by psfgen otherwise old coordinates will
+	# be written to pdb file
+	set atoms [atomselect top all]
+	set data [join [$atoms get {segid resid name x y z}]]
+	foreach {segid resid name x y z} $data {
+		#puts "$segid $resid $name $x $y $z"
+		coord $segid $resid $name "$x $y $z"
+	}
+	# Use pbctools to draw periodic box
+	pbc set "$options(x) $options(y) $options(z)" -all
+	pbc box -center origin ;# draw box
+	mol delete $parentid
+	writepdb tmp.pdb
+	writepsf tmp.psf
 	vmdcon -info "Finished molecule replication"
 }
 
@@ -166,22 +220,38 @@ proc ::liquify::populate {} {
 proc ::liquify::reset {} {
 	variable options
 	::liquify::clear_mols
+	resetpsf
 	::liquify::set_defaults
 }
 
 # Reset input fields to default
 proc ::liquify::set_defaults {} {
 	variable options
-	set options(niter) 100
+	set options(niter) 10
 	set options(pdb) "/home/leif/src/liquify/thiophene/thiophene.pdb"
 	set options(psf) "/home/leif/src/liquify/thiophene/thiophene.psf"
 	set options(cube) 0
 	set options(reject) 0
 	foreach n {x y z} {
-		set options($n) 10
+		set options($n) 75
 	}
 }
 
+# Return {x y z} list of random points within periodic box
+proc ::liquify::random_xyz {} {
+	variable options
+	set dr {}
+	foreach n {x y z} {
+		set val [expr ($options($n) * rand()) - ($options($n) / 2.0)]
+		lappend dr $val
+	}
+	puts "DR: $dr"
+	return $dr
+}
+
+proc ::liquify::random_angle {} {
+	return [expr (360.0 * rand())]
+}
 
 # Unload all molecules
 # Reasoning: for setting up liquids -> no other molecules
