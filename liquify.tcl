@@ -258,6 +258,11 @@ proc ::liquify::scatter_molecules {diam} {
 	set segnames [lsort -unique [$allatoms get segname]]
 	set delete_mols 0
 	set placed {}
+	# Setup box boundaries
+	foreach n {x y z} {
+		set max$n [expr $options(x) / 2.0]
+		set min$n [expr -[subst \$max$n]]
+	}
 
 	foreach segname $segnames {
 		set atoms [atomselect top "segname $segname"]
@@ -289,9 +294,24 @@ proc ::liquify::scatter_molecules {diam} {
 			$atoms move [transoffset $offset]
 
 			set pdata [join [$atoms get {name radius x y z}]]
+			# Alter pdata for atoms outside box
+			set outside_atoms [atomselect top "segname $segname and \
+			( x < $minx or x > $maxx or y < $miny or y > $maxy or \
+			z < $minz or z > $maxz)"]
+
+			set outside_xyz [join [$outside_atoms get {segid resid name x y z}]]
+			set i [llength $outside_xyz]
+			if {$i != 0} {
+				# TODO
+				foreach {segid resid name x y z} $outside_xyz {
+					puts "$segid $resid $name $x $y $z"
+				}
+			}
+			
 			set cog [measure center $atoms] ;# Center of geometry
 
 			set new_xyz [join [$atoms get {segid resid name x y z}]]
+
 			set overlap [::liquify::check_overlap $segname $pdata $placed $cog $diam]
 			
 			if {$overlap} {
