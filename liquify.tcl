@@ -151,6 +151,7 @@ proc ::liquify::save_reload {name} {
 proc ::liquify::populate {} {
 	variable PI
 	variable options
+	variable base_coords
 
 	vmdcon -info "Reset display field..."
 
@@ -191,6 +192,7 @@ proc ::liquify::populate {} {
 	
 	# Retrive info from parent molecule
 	set atoms [atomselect top all] ;# Select all atoms
+	set base_coords [$atoms get {resname name x y z}]
 	set diam [vecdist {*}[measure minmax $atoms]] ;# Estimate molecular diameter
 	set radius [expr $diam / 2.0] ;# Molecular radius
 	set resnames [lsort -unique [$atoms get resname]] ;# Residue names
@@ -233,16 +235,16 @@ proc ::liquify::populate {} {
 proc ::liquify::generate_blanks {n resnames} {
 	variable options
 
-	for {set i 0} {$i < $n} {incr i} {
-		set segname S[format %03i $i]
-		segment $segname {
-			first NONE
-			last NONE
+	set segname LIQ ;#S[format %03i $i]
+	segment $segname {
+		first NONE
+		last NONE
+		for {set i 0} {$i < $n} {incr i} {
 			foreach resname $resnames {
-				residue 1 $resname
+				residue $i $resname
 			}
 		}
-		coordpdb $options(pdb) $segname
+		#coordpdb $options(pdb) $segname
 	}
 }
 
@@ -252,10 +254,11 @@ proc ::liquify::generate_blanks {n resnames} {
 #
 proc ::liquify::scatter_molecules {diam} {
 	variable options
+	variable base_coords
 	# radius: estimated molecule radius
 
 	set allatoms [atomselect top all]
-	set segnames [lsort -unique [$allatoms get segname]]
+	set resids [lsort -unique [$allatoms get resid]]
 	set delete_mols 0
 	set placed {}
 	# Setup box boundaries
@@ -264,25 +267,31 @@ proc ::liquify::scatter_molecules {diam} {
 		set min$n [expr -[subst \$max$n]]
 	}
 
-	foreach segname $segnames {
-		set atoms [atomselect top "segname $segname"]
+	foreach resid $resids {
+		set atoms [atomselect top "resid $resid"]
 		set old_xyz [join [$atoms get {name x y z}]]
+		#puts "old xyz: $old_xyz"
 		set new_xyz {}
 		set overlap 1 ;# initially "overlapped"
 		set failures 0
 		# Skip moving/checking and delete the unplaced molecules
 		if {$delete_mols} {
-			delatom $segname
+			delatom LIQ $resid
 			continue
 		}
+
+		$atoms set {resname name x y z} $base_coords
+
+		#puts "new xyz"
+		#puts [join [$atoms get {name x y z}]]
 
 		while {$overlap} {
 			incr failures
 			
 			if {$failures > $options(niter)} {
-				vmdcon -info "Reached max iterations for placing molecules: $segname"
+				vmdcon -info "Reached max iterations for placing molecules: $resid"
 				set delete_mols 1
-				delatom $segname
+				delatom LIQ $resid
 				break
 			}
 			
@@ -295,7 +304,7 @@ proc ::liquify::scatter_molecules {diam} {
 
 			set pdata [join [$atoms get {name radius x y z}]]
 			# Alter pdata for atoms outside box
-			set outside_atoms [atomselect top "segname $segname and \
+			set outside_atoms [atomselect top "resid $resid and \
 			( x < $minx or x > $maxx or y < $miny or y > $maxy or \
 			z < $minz or z > $maxz)"]
 
@@ -304,7 +313,7 @@ proc ::liquify::scatter_molecules {diam} {
 			if {$i != 0} {
 				# TODO
 				foreach {segid resid name x y z} $outside_xyz {
-					puts "$segid $resid $name $x $y $z"
+					#puts "$segid $resid $name $x $y $z"
 				}
 			}
 			
@@ -312,7 +321,7 @@ proc ::liquify::scatter_molecules {diam} {
 
 			set new_xyz [join [$atoms get {segid resid name x y z}]]
 
-			set overlap [::liquify::check_overlap $segname $pdata $placed $cog $diam]
+			set overlap [::liquify::check_overlap $pdata $placed $cog $diam]
 			
 			if {$overlap} {
 				set roffset {}
@@ -330,7 +339,7 @@ proc ::liquify::scatter_molecules {diam} {
 				coord $segid $resid $name "$x $y $z"
 			}
 
-			lappend placed $segname
+			lappend placed $resid
 		}
 	}
 }
@@ -338,19 +347,17 @@ proc ::liquify::scatter_molecules {diam} {
 #
 #
 #
-proc ::liquify::check_overlap {segname pdata placed cog diam} {
+proc ::liquify::check_overlap {pdata placed cog diam} {
 	variable options
 	# Only bother checking segments which have been "placed"
-	foreach seg $placed {
-		set atoms2 [atomselect top "segname $seg"]
+	foreach res $placed {
+		set atoms2 [atomselect top "resid $res"]
 		set cog2 [measure center $atoms2]
 		set dr [vecdist $cog $cog2]
-		#puts "$segname $seg"
+		# Use early rejection to prevent uncessesary checks
 		if {$options(reject) && $dr >= $diam} {
-			#puts "$dr >= $diam (no further comparison)"
 			continue
 		}
-		#puts "CHECK: $dr < $diam"
 		# check each atom against each other atom
 		set cdata [join [$atoms2 get {name radius x y z}]]
 		foreach {name radius x y z} $pdata {
@@ -447,5 +454,5 @@ proc ::liquify_tk {} {
 #
 proc ::liquify::validate_input {} {
 	variable options
-	puts "Input validation..."
+	vmdcon -info "Input validation..."
 }
