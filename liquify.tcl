@@ -35,6 +35,7 @@ namespace eval ::liquify {
 proc ::liquify::build_gui {} {
 	variable w
 	variable options
+	::liquify::set_defaults
 	wm title $w "Setup Molecular Liquid"
 
 	set twidth 50 ;# text box width
@@ -114,7 +115,7 @@ proc ::liquify::build_gui {} {
 
 	set l [label $w.f3.l2 -text "Name"]
 	set e [entry $w.f3.e2 -textvariable ::liquify::options(savefile) -width $twidth]
-	set cmd "::liquify::save_files"
+	set cmd "::liquify::save_reload"
 	set b [button $w.f3.b2 -text "Save PBD/PSF" -command $cmd]
 	grid $l -column 0 -row 1
 	grid $e -column 1 -row 1
@@ -135,10 +136,13 @@ proc ::liquify::build_gui {} {
 #
 # Save new PDB and PSF files
 # 
-proc ::liquify::save_files {name} {
+proc ::liquify::save_reload {name} {
 	# TODO catch errors
 	writepdb $name.pdb
 	writepsf $name.psf
+
+	mol delete [molinfo top]
+	mol load psf $name.psf pdb $name.pdb
 }
 
 #
@@ -206,20 +210,14 @@ proc ::liquify::populate {} {
 	::liquify::generate_blanks $num_mols $resnames
 
 	# It seems necessary to write to file and reload XXX
-	::liquify::save_files tmp
-
-	mol delete [molinfo top]
-	mol load psf tmp.psf pdb tmp.pdb
+	::liquify::save_reload $options(savefile)
 
 	# Scatter molecules randomly around in the box
 	vmdcon -info "Attempting to scatter $num_mols molecules..."
 	::liquify::scatter_molecules $diam
 	vmdcon -info "...done"
 
-	::liquify::save_files tmp
-
-	mol delete [molinfo top]
-	mol load psf tmp.psf pdb tmp.pdb
+	::liquify::save_reload $options(savefile)
 
 	# Use pbctools to draw periodic box
 	pbc set "$options(x) $options(y) $options(z)" -all
@@ -369,6 +367,8 @@ proc ::liquify::set_defaults {} {
 	set options(niter) 10
 	set options(pdb) "/home/leif/src/liquify/thiophene/thiophene.pdb"
 	set options(psf) "/home/leif/src/liquify/thiophene/thiophene.psf"
+	set options(savedir) $::env(PWD)
+	set options(savefile) myliquid
 	set options(cube) 0
 	set options(reject) 1
 	set options(density) 0.74 ;# hexagonal close packing for spheres
