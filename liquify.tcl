@@ -212,13 +212,18 @@ proc ::liquify::populate {} {
 	mol load psf tmp.psf pdb tmp.pdb
 
 	# Scatter molecules randomly around in the box
-	::liquify::scatter_molecules $radius $com
+	vmdcon -info "Attempting to scatter $num_mols molecules..."
+	::liquify::scatter_molecules $diam
+	vmdcon -info "...done"
+
+	::liquify::save_files tmp
+
+	mol delete [molinfo top]
+	mol load psf tmp.psf pdb tmp.pdb
 
 	# Use pbctools to draw periodic box
 	pbc set "$options(x) $options(y) $options(z)" -all
 	pbc box -center origin ;# draw box
-
-	::liquify::save_files tmp
 
 	vmdcon -info "Finished molecule replication"
 }
@@ -253,43 +258,94 @@ proc ::liquify::scatter_molecules {diam} {
 
 	set allatoms [atomselect top all]
 	set segnames [lsort -unique [$allatoms get segname]]
+	set delete_mols 0
+	set placed {}
 
 	foreach segname $segnames {
 		set atoms [atomselect top "segname $segname"]
-		set com [measure center $atoms weight mass] ;# Center of mass
 		set old_xyz [join [$atoms get {name x y z}]]
 		set new_xyz {}
-		set overlap 1
+		set overlap 1 ;# initially "overlapped"
 		set failures 0
+		# Skip moving/checking and delete the unplaced molecules
+		if {$delete_mols} {
+			delatom $segname
+			continue
+		}
 
-		while {overlap} {
+		while {$overlap} {
 			incr failures
+			
+			if {$failures > $options(niter)} {
+				vmdcon -info "Reached max iterations for placing molecules: $segname"
+				set delete_mols 1
+				delatom $segname
+				break
+			}
+			
 			foreach n {x y z} {
 				$atoms move [transaxis $n [::liquify::random_angle]]
 			}
-			$atoms move [transoffset [::liquify::random_xyz]]
+			set offset [::liquify::random_xyz]
+			#puts "Offset: $offset"
+			$atoms move [transoffset $offset]
+
+			set pdata [join [$atoms get {name radius x y z}]]
+			set cog [measure center $atoms] ;# Center of geometry
+
 			set new_xyz [join [$atoms get {segid resid name x y z}]]
-			set overlap 0
-
-			foreach seg $segnames {
-				if {$seg == $segname} continue ;# skip self-comparison
-
-				set atoms2 [atomselect top "segname $seg"]
-				set com2 [measure center $atoms2 weight mass]
-				set dr [vecdist $com $com2]
-				if {$options(reject) && $dr >= $diam} {
-					puts "dr >= diam: $dr, $diam (no further comparison)"
-					continue
+			set overlap [::liquify::check_overlap $segname $pdata $placed $cog $diam]
+			
+			if {$overlap} {
+				set roffset {}
+				foreach n $offset {
+					lappend roffset [expr -$n]
 				}
-				puts "Thorough check for overlap"
-				# TODO
+				#puts "RESET: $roffset"
+				$atoms move [transoffset $roffset]
 			}
-		} 
 
-		foreach {segid resid name x y z} $new_xyz {
-			coord $segid $resid $name "$x $y $z"
+		}
+
+		if {!$delete_mols} {
+			foreach {segid resid name x y z} $new_xyz {
+				coord $segid $resid $name "$x $y $z"
+			}
+
+			lappend placed $segname
 		}
 	}
+}
+
+#
+#
+#
+proc ::liquify::check_overlap {segname pdata placed cog diam} {
+	variable options
+	# Only bother checking segments which have been "placed"
+	foreach seg $placed {
+		set atoms2 [atomselect top "segname $seg"]
+		set cog2 [measure center $atoms2]
+		set dr [vecdist $cog $cog2]
+		#puts "$segname $seg"
+		if {$options(reject) && $dr >= $diam} {
+			#puts "$dr >= $diam (no further comparison)"
+			continue
+		}
+		#puts "CHECK: $dr < $diam"
+		# check each atom against each other atom
+		set cdata [join [$atoms2 get {name radius x y z}]]
+		foreach {name radius x y z} $pdata {
+			foreach {name2 radius2 x2 y2 z2} $cdata {
+				set rcut [expr $radius + $radius2]
+				set dist [vecdist "$x $y $z" "$x2 $y2 $z2"]
+				if {$dist < $rcut} {
+					return 1
+				}
+			}
+		}
+	}
+	return 0 ;# No atomic overlap
 }
 
 #
@@ -314,10 +370,10 @@ proc ::liquify::set_defaults {} {
 	set options(pdb) "/home/leif/src/liquify/thiophene/thiophene.pdb"
 	set options(psf) "/home/leif/src/liquify/thiophene/thiophene.psf"
 	set options(cube) 0
-	set options(reject) 0
+	set options(reject) 1
 	set options(density) 0.74 ;# hexagonal close packing for spheres
 	foreach n {x y z} {
-		set options($n) 25
+		set options($n) 10
 	}
 }
 
