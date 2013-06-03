@@ -23,6 +23,8 @@ namespace eval ::liquify {
 
 	# Simulation parameters
 	variable options
+	variable segname
+	set segname LIQ
 
 	# Constants
 	variable PI
@@ -83,7 +85,7 @@ proc ::liquify::build_gui {} {
 	# Frame containing number iterations
 	grid [labelframe $w.f4 -text "Runtime Options"] -column 1 -row 1
 
-	set l [label $w.f4.l1 -text "Number of iterations"]
+	set l [label $w.f4.l1 -text "Failed iteration cutoff"]
 	set s [spinbox $w.f4.s1 -textvariable ::liquify::options(niter) \
 		-from 100 -to 1000 -increment 50 -width $nwidth -validate key \
 		-vcmd {string is int %P}]
@@ -102,7 +104,6 @@ proc ::liquify::build_gui {} {
 	grid $e -column 1 -row 2
 
 	# Save new PDB and PSF files
-	# Click button save -> prompt for directory and name
 	grid [labelframe $w.f3 -text "Save New Data"] -columnspan 2 -rowspan 1
 	
 	set l [label $w.f3.l1 -text "Location"] 
@@ -119,7 +120,7 @@ proc ::liquify::build_gui {} {
 	set b [button $w.f3.b2 -text "Save PBD/PSF" -command $cmd]
 	grid $l -column 0 -row 1
 	grid $e -column 1 -row 1
-	grid $b -column 2 -row 1
+	#grid $b -column 2 -row 1
 	
 	# Frame containing generate and reset buttons
 	grid [labelframe $w.f5 -text "Populate Box"] -columnspan 2 -rowspan 1
@@ -192,19 +193,20 @@ proc ::liquify::populate {} {
 	
 	# Retrive info from parent molecule
 	set atoms [atomselect top all] ;# Select all atoms
-	set base_coords [$atoms get {resname name x y z}]
+	set base_coords [$atoms get {resname name x y z}] ;# Use for relative atom coords
 	set diam [vecdist {*}[measure minmax $atoms]] ;# Estimate molecular diameter
 	set radius [expr $diam / 2.0] ;# Molecular radius
 	set resnames [lsort -unique [$atoms get resname]] ;# Residue names
-	mol delete [molinfo top]
+	mol delete [molinfo top] ;# Remove molecule
 	# Estimate number of molecules based on geometry
 	set vol_box [expr $options(x) * $options(y) * $options(z)]
 	set vol_sphere [expr 4.0 * $PI * ($radius**3) / 3.0]
 	set num_mols [expr ($vol_box * $options(density)) / $vol_sphere]
 	set num_mols [expr round($num_mols)]
-	# TODO Need to find a way around this
-	if {$num_mols > 999} {
-		vmdcon -warn "Too many molecules (>999) would mess up segname. Halting."
+	# Residue names can only be 1-5 characters
+	# could start adding new segments XXX
+	if {$num_mols > 99999} {
+		vmdcon -warn "Too many molecules (>99999) would mess up resid. Halting."
 		return 1
 	}
 
@@ -234,8 +236,8 @@ proc ::liquify::populate {} {
 # 
 proc ::liquify::generate_blanks {n resnames} {
 	variable options
+	variable segname
 
-	set segname LIQ ;#S[format %03i $i]
 	segment $segname {
 		first NONE
 		last NONE
@@ -244,73 +246,70 @@ proc ::liquify::generate_blanks {n resnames} {
 				residue $i $resname
 			}
 		}
-		#coordpdb $options(pdb) $segname
 	}
 }
 
 #
 # Set random coordinates for every molecule present
-# Separation by segname
+# Separation by resid
 #
 proc ::liquify::scatter_molecules {diam} {
 	variable options
 	variable base_coords
-	# radius: estimated molecule radius
+	variable segname
 
 	set allatoms [atomselect top all]
 	set resids [lsort -unique [$allatoms get resid]]
 	set delete_mols 0
 	set placed {}
+
 	# Setup box boundaries
 	foreach n {x y z} {
 		set max$n [expr $options(x) / 2.0]
 		set min$n [expr -[subst \$max$n]]
 	}
 
+	# Move one molecule at a time
 	foreach resid $resids {
 		set atoms [atomselect top "resid $resid"]
-		set old_xyz [join [$atoms get {name x y z}]]
-		#puts "old xyz: $old_xyz"
 		set new_xyz {}
 		set overlap 1 ;# initially "overlapped"
 		set failures 0
+
 		# Skip moving/checking and delete the unplaced molecules
 		if {$delete_mols} {
-			delatom LIQ $resid
+			delatom $segname $resid
 			continue
 		}
 
+		# Set relative atom coordinates
 		$atoms set {resname name x y z} $base_coords
 
-		#puts "new xyz"
-		#puts [join [$atoms get {name x y z}]]
-
+		# Translate and rotate a molecule
 		while {$overlap} {
 			incr failures
 			
 			if {$failures > $options(niter)} {
-				vmdcon -info "Reached max iterations for placing molecules: $resid"
+				vmdcon -info "Reached max iterations for placing molecules at residue: $resid"
 				set delete_mols 1
-				delatom LIQ $resid
+				delatom $segname $resid
 				break
 			}
 			
 			foreach n {x y z} {
 				$atoms move [transaxis $n [::liquify::random_angle]]
 			}
+			# Store translation in case it needs to be reversed
 			set offset [::liquify::random_xyz]
-			#puts "Offset: $offset"
 			$atoms move [transoffset $offset]
-
+			
 			set pdata [join [$atoms get {name radius x y z}]]
-			# Alter pdata for atoms outside box
+			# Find atoms outside boundaries
 			set outside_atoms [atomselect top "resid $resid and \
 			( x < $minx or x > $maxx or y < $miny or y > $maxy or \
 			z < $minz or z > $maxz)"]
-
-			set outside_xyz [join [$outside_atoms get {segid resid name x y z}]]
-			set i [llength $outside_xyz]
-			if {$i != 0} {
+			if {[llength $outside_atoms] > 0} {
+				set outside_xyz [join [$outside_atoms get {segid resid name x y z}]]
 				# TODO
 				foreach {segid resid name x y z} $outside_xyz {
 					#puts "$segid $resid $name $x $y $z"
@@ -318,22 +317,22 @@ proc ::liquify::scatter_molecules {diam} {
 			}
 			
 			set cog [measure center $atoms] ;# Center of geometry
-
 			set new_xyz [join [$atoms get {segid resid name x y z}]]
 
+			# If atoms overlapped, move atoms back to try again next loop
 			set overlap [::liquify::check_overlap $pdata $placed $cog $diam]
-			
 			if {$overlap} {
-				set roffset {}
+				set rev_offset {}
 				foreach n $offset {
-					lappend roffset [expr -$n]
+					lappend rev_offset [expr -$n]
 				}
-				#puts "RESET: $roffset"
-				$atoms move [transoffset $roffset]
+				$atoms move [transoffset $rev_offset]
 			}
 
 		}
 
+		# If successfully placed molecules, give psfgen new coordinate
+		# information XXX
 		if {!$delete_mols} {
 			foreach {segid resid name x y z} $new_xyz {
 				coord $segid $resid $name "$x $y $z"
@@ -345,37 +344,38 @@ proc ::liquify::scatter_molecules {diam} {
 }
 
 #
-#
+# Check the atomic overlap between two molecules.  Args refers to molecule being
+# scattered, atoms2 etc refer to already placed molecules.
 #
 proc ::liquify::check_overlap {pdata placed cog diam} {
 	variable options
+
 	# Only bother checking segments which have been "placed"
 	foreach res $placed {
 		set atoms2 [atomselect top "resid $res"]
 		set cog2 [measure center $atoms2]
 		set dr [vecdist $cog $cog2]
+		
 		# Use early rejection to prevent uncessesary checks
 		if {$options(reject) && $dr >= $diam} {
 			continue
 		}
-		# check each atom against each other atom
+
+		# Molecular spheres overlap, check every atom pair
 		set cdata [join [$atoms2 get {name radius x y z}]]
 		foreach {name radius x y z} $pdata {
 			foreach {name2 radius2 x2 y2 z2} $cdata {
-				set rcut [expr $radius + $radius2]
+				set rcut [expr $radius + $radius2] ;# atomic radii may vary
 				set dist [vecdist "$x $y $z" "$x2 $y2 $z2"]
 				if {$dist < $rcut} {
+					# Atomic overlap, reject move
 					return 1
 				}
 			}
 		}
 	}
-	return 0 ;# No atomic overlap
+	return 0 ;# No atomic overlap, accept move
 }
-
-#
-#
-#
 
 #
 # Clear all input and loaded molecules
@@ -387,13 +387,14 @@ proc ::liquify::reset {} {
 }
 
 #
-# Reset input fields to default
+# Reset input fields to default TODO remove
 #
 proc ::liquify::set_defaults {} {
 	variable options
 	set options(niter) 10
-	set options(pdb) "/home/leif/src/liquify/thiophene/thiophene.pdb"
-	set options(psf) "/home/leif/src/liquify/thiophene/thiophene.psf"
+	set options(pdb) "/home/leif/research/data/thiophene/thiophene.pdb"
+	set options(psf) "/home/leif/research/data/thiophene/thiophene.psf"
+	set options(top) "/home/leif/research/data/thiophene/thiophene.top"
 	set options(savedir) $::env(PWD)
 	set options(savefile) myliquid
 	set options(cube) 0
