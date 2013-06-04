@@ -227,6 +227,9 @@ proc ::liquify::populate {} {
 	pbc set "$options(x) $options(y) $options(z)" -all
 	pbc box -center origin ;# draw box
 
+	# Represent molecules in Licorice style
+	mol modstyle 0 top Licorice 0.300000 10.000000 10.000000
+
 	vmdcon -info "Finished molecule replication"
 }
 
@@ -235,7 +238,7 @@ proc ::liquify::populate {} {
 # blank -> unassigned coordinates
 # 
 proc ::liquify::generate_blanks {n resnames} {
-	variable options
+	#variable options
 	variable segname
 
 	segment $segname {
@@ -273,6 +276,7 @@ proc ::liquify::scatter_molecules {diam} {
 	foreach resid $resids {
 		set atoms [atomselect top "resid $resid"]
 		set new_xyz {}
+		set pdata {}
 		set overlap 1 ;# initially "overlapped"
 		set failures 0
 
@@ -288,6 +292,7 @@ proc ::liquify::scatter_molecules {diam} {
 		# Translate and rotate a molecule
 		while {$overlap} {
 			incr failures
+			set new_xyz {}
 			
 			if {$failures > $options(niter)} {
 				vmdcon -info "Reached max iterations for placing molecules at residue: $resid"
@@ -302,31 +307,30 @@ proc ::liquify::scatter_molecules {diam} {
 			# Store translation in case it needs to be reversed
 			set offset [::liquify::random_xyz]
 			$atoms move [transoffset $offset]
-			
-			set pdata [join [$atoms get {name radius x y z}]]
-			# Find atoms outside boundaries
-			set outside_atoms [atomselect top "resid $resid and \
-			( x < $minx or x > $maxx or y < $miny or y > $maxy or \
-			z < $minz or z > $maxz)"]
-			if {[llength $outside_atoms] > 0} {
-				set outside_xyz [join [$outside_atoms get {segid resid name x y z}]]
-				# TODO
-				foreach {segid resid name x y z} $outside_xyz {
-					#puts "$segid $resid $name $x $y $z"
-				}
-			}
-			
-			set cog [measure center $atoms] ;# Center of geometry
-			set new_xyz [join [$atoms get {segid resid name x y z}]]
+			set pdata [join [$atoms get {segid resid name x y z}]]
+			# Center of geometry - calculate before wrapping atoms for PBC	
+			set cog [measure center $atoms]
 
-			# If atoms overlapped, move atoms back to try again next loop
-			set overlap [::liquify::check_overlap $pdata $placed $cog $diam]
-			if {$overlap} {
-				set rev_offset {}
-				foreach n $offset {
-					lappend rev_offset [expr -$n]
+			# Adjust any atoms for PBC
+			foreach {segid resid radius name x y z} \
+				[join [$atoms get {segid resid radius name x y z}]] {
+				#puts "$segid $resid $radius $name $x $y $z"
+				foreach n {x y z} {
+					set val [subst $$n]
+					if {$val < [subst \$min$n]} {
+						set $n [expr $val + $options($n)]
+					} elseif {$val > [subst \$max$n]} {
+						set $n [expr $val - $options($n)]
+					}
 				}
-				$atoms move [transoffset $rev_offset]
+				lappend new_xyz [list $segid $resid $radius $name $x $y $z]
+			}
+
+			set overlap [::liquify::check_overlap $new_xyz $placed $cog $diam]
+	
+			# If atoms overlapped, move atoms back to try again next loop
+			if {$overlap} {
+				$atoms set {resname name x y z} $base_coords
 			}
 
 		}
@@ -334,7 +338,7 @@ proc ::liquify::scatter_molecules {diam} {
 		# If successfully placed molecules, give psfgen new coordinate
 		# information XXX
 		if {!$delete_mols} {
-			foreach {segid resid name x y z} $new_xyz {
+			foreach {segid resid name x y z} $pdata {
 				coord $segid $resid $name "$x $y $z"
 			}
 
@@ -363,7 +367,7 @@ proc ::liquify::check_overlap {pdata placed cog diam} {
 
 		# Molecular spheres overlap, check every atom pair
 		set cdata [join [$atoms2 get {name radius x y z}]]
-		foreach {name radius x y z} $pdata {
+		foreach {segid resid radius name x y z} [join $pdata] {
 			foreach {name2 radius2 x2 y2 z2} $cdata {
 				set rcut [expr $radius + $radius2] ;# atomic radii may vary
 				set dist [vecdist "$x $y $z" "$x2 $y2 $z2"]
