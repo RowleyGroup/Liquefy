@@ -423,6 +423,27 @@ proc ::liquify::write_xsc {} {
 	close $xsc_file
 	return 1
 }
+
+#
+#
+#
+proc ::liquify::calc_density {} {
+	set resids [lsort -integer -unique [[atomselect top all] get resid]]
+	set atoms [atomselect top "resid [lindex $resids 0]"]
+	# molar mass one molecule (residue)
+	set mol_mass [measure sumweights $atoms weight mass]
+	# actual mass one molecule (g)
+	set mol_mass [expr $mol_mass / 6.022e23]
+	set tot_mass [expr $mol_mass * [llength $resids]]
+	set params [join [pbc get -now]]
+	set x [lindex $params 0]
+	set y [lindex $params 1]
+	set z [lindex $params 2]
+	set A3TOmL 1.0e-24 ;# cubic angstroms to mL conversion
+	set vol [expr $x * $y * $z * $A3TOmL]
+	return [expr $tot_mass / $vol] ;# g/mL
+}
+
 #
 # Reset input fields to default TODO remove
 #
