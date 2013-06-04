@@ -41,14 +41,15 @@ proc ::liquify::build_gui {} {
 	wm title $w "Setup Molecular Liquid"
 
 	set twidth 50 ;# text box width
-	set nwidth 10 ;# number box width
+	set nwidth 5 ;# number box width
 
 	# Note: all options passed to Tk have to be qualified with namespace
 	# or they refer to global vars
 	
 	# Frame containing PBD and PSF input fields
 	# PDB File
-	grid [labelframe $w.f1 -text "Load Molecule"] -columnspan 2 -rowspan 1
+	grid [labelframe $w.f1 -text "Load Molecule"] \
+		-columnspan 2 -rowspan 1 -sticky news
 
 	set row 0
 	foreach n {pdb psf top} {
@@ -57,14 +58,15 @@ proc ::liquify::build_gui {} {
 		set e [entry $w.f1.$n-e1 -width $twidth -textvariable ::liquify::options($n)] 
 		set cmd "set ::liquify::options($n) \[tk_getOpenFile\]"
 		set b [button $w.f1.$n-b1 -text "Browse" -command $cmd]
-		grid $l -column 0 -row $row
-		grid $e -column 1 -row $row
-		grid $b -column 2 -row $row
+		grid $l -column 0 -row $row -sticky e
+		grid $e -column 1 -row $row -sticky ew
+		grid $b -column 2 -row $row -sticky w
 		incr row
 	}
 	
 	# Frame containing box dimensions
-	grid [labelframe $w.f2 -text "Box Dimensions"] -column 0 -row 1
+	grid [labelframe $w.f2 -text "Box Dimensions"] -column 0 -row 1 \
+		-sticky news
 	
 	set row 0
 	foreach n {x y z} {
@@ -72,58 +74,61 @@ proc ::liquify::build_gui {} {
 		-validate key -vcmd {string is int %P}]
 		#	-validate key -vcmd {string is int %P}]
 		set l [label $w.f2.$n-l1 -text "$n"]
-		grid $l -column 0 -row $row
-		grid $e -column 1 -row $row
+		grid $l -column 0 -row $row -sticky e
+		grid $e -column 1 -row $row -sticky w
 		incr row
 	}
 
 	set l [label $w.f2.l4 -text "Use Cube"]
 	set c [checkbutton $w.f2.c1 -variable ::liquify::options(cube)]
-	grid $l -column 2 -row 0
-	grid $c -column 3 -row 0
+	grid $l -column 2 -row 0 -sticky e
+	grid $c -column 3 -row 0 -sticky w
 
-	# Frame containing number iterations
-	grid [labelframe $w.f4 -text "Runtime Options"] -column 1 -row 1
+	# Frame containing runtime options
+	grid [labelframe $w.f4 -text "Runtime Options"] -column 1 -row 1 \
+		-sticky news
 
 	set l [label $w.f4.l1 -text "Failed iteration cutoff"]
 	set s [spinbox $w.f4.s1 -textvariable ::liquify::options(niter) \
 		-from 100 -to 1000 -increment 50 -width $nwidth -validate key \
 		-vcmd {string is int %P}]
-	grid $l -column 0 -row 0
-	grid $s -column 1 -row 0
+	grid $l -column 0 -row 0 -sticky e
+	grid $s -column 1 -row 0 -sticky w
 
 	set l [label $w.f4.l2 -text "Use early rejection"]
 	set c [checkbutton $w.f4.c1 -variable ::liquify::options(reject)]
-	grid $l -column 0 -row 1
-	grid $c -column 1 -row 1
+	grid $l -column 0 -row 1 -sticky e
+	grid $c -column 1 -row 1 -sticky w
 
-	set l [label $w.f4.l3 -text "Density estimate\n(molecules/vol)"]
+	set l [label $w.f4.l3 -text "Sphere packing estimate"]
 	set e [entry $w.f4.e1 -textvariable ::liquify::options(density) \
 	-width $nwidth -validate key -vcmd {string is double %P}]
-	grid $l -column 0 -row 2
-	grid $e -column 1 -row 2
+	grid $l -column 0 -row 2 -sticky e
+	grid $e -column 1 -row 2 -sticky w
 
 	# Save new PDB and PSF files
-	grid [labelframe $w.f3 -text "Save New Data"] -columnspan 2 -rowspan 1
+	grid [labelframe $w.f3 -text "Save New Data"] \
+		-columnspan 2 -rowspan 1 -sticky news
 	
 	set l [label $w.f3.l1 -text "Location"] 
 	set e [entry $w.f3.e1 -textvariable ::liquify::options(savedir) -width $twidth] 
 	set cmd "set ::liquify::options(savedir) \[tk_chooseDirectory\]"
 	set b [button $w.f3.b1 -text "Browse" -command $cmd]
-	grid $l -column 0 -row 0
-	grid $e -column 1 -row 0
-	grid $b -column 2 -row 0
+	grid $l -column 0 -row 0 -sticky e
+	grid $e -column 1 -row 0 -sticky ew
+	grid $b -column 2 -row 0 -sticky w
 
 	set l [label $w.f3.l2 -text "Name"]
 	set e [entry $w.f3.e2 -textvariable ::liquify::options(savefile) -width $twidth]
 	set cmd "::liquify::save_reload"
 	set b [button $w.f3.b2 -text "Save PBD/PSF" -command $cmd]
-	grid $l -column 0 -row 1
-	grid $e -column 1 -row 1
+	grid $l -column 0 -row 1 -sticky e
+	grid $e -column 1 -row 1 -sticky ew
 	#grid $b -column 2 -row 1
 	
 	# Frame containing generate and reset buttons
-	grid [labelframe $w.f5 -text "Populate Box"] -columnspan 2 -rowspan 1
+	grid [labelframe $w.f5 -text "Populate Box"] \
+		-columnspan 2 -rowspan 1 -sticky ns
 
 	set cmd "::liquify::populate"
 	set b [button $w.f5.b1 -text "Fill!" -command $cmd]
@@ -231,6 +236,14 @@ proc ::liquify::populate {} {
 	mol modstyle 0 top Licorice 0.300000 10.000000 10.000000
 
 	vmdcon -info "Finished molecule replication"
+
+	# Save XSC file containing cell basis vectors
+	vmdcon -info "Writing xsc file..."
+	if ![::liquify::write_xsc] {
+		vmdcon -err "Write to xsc file failed. Halting"
+		return 1
+	}
+	vmdcon -info "...done"
 }
 
 #
@@ -262,7 +275,7 @@ proc ::liquify::scatter_molecules {diam} {
 	variable segname
 
 	set allatoms [atomselect top all]
-	set resids [lsort -unique [$allatoms get resid]]
+	set resids [lsort -integer -unique [$allatoms get resid]]
 	set delete_mols 0
 	set placed {}
 
@@ -391,21 +404,41 @@ proc ::liquify::reset {} {
 }
 
 #
+#
+#
+proc ::liquify::write_xsc {} {
+	variable options
+	if ![file isdirectory $options(savedir)] {
+		vmdcon -err "$options(savedir) is not a valid directory!"
+		return 0
+	}
+	set fname "$options(savedir)/$options(savefile).xsc"
+	if [catch {open $fname w} xsc_file] {
+		vmdcon -err "Could not write to $fname"
+		return 0
+	}
+	puts $xsc_file {#NAMD extended system configuration\n}
+	puts $xsc_file {#$LABELS step a_x a_y a_z b_x b_y b_z c_x c_y c_z o_x o_y o_z\n}
+	puts $xsc_file "100 $options(x) 0 0 0 $options(y) 0 0 0 $options(z) 0 0 0\n"
+	close $xsc_file
+	return 1
+}
+#
 # Reset input fields to default TODO remove
 #
 proc ::liquify::set_defaults {} {
 	variable options
-	set options(niter) 10
+	set options(niter) 150
 	set options(pdb) "/home/leif/research/data/thiophene/thiophene.pdb"
 	set options(psf) "/home/leif/research/data/thiophene/thiophene.psf"
-	set options(top) "/home/leif/research/data/thiophene/thiophene.top"
+	set options(top) "/home/leif/research/data/thiophene/thiophene.rtf"
 	set options(savedir) $::env(PWD)
 	set options(savefile) myliquid
 	set options(cube) 0
 	set options(reject) 1
 	set options(density) 0.74 ;# hexagonal close packing for spheres
 	foreach n {x y z} {
-		set options($n) 10
+		set options($n) 30
 	}
 }
 
