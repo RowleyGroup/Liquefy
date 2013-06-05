@@ -25,6 +25,10 @@ namespace eval ::liquify {
 	variable options
 	variable segname
 	set segname LIQ
+	variable density
+	set density {0 g/mL}
+	variable tot_resid
+	set tot_resid 0
 
 	# Constants
 	variable PI
@@ -128,15 +132,34 @@ proc ::liquify::build_gui {} {
 	
 	# Frame containing generate and reset buttons
 	grid [labelframe $w.f5 -text "Populate Box"] \
-		-columnspan 2 -rowspan 1 -sticky ns
+		-column 0 -row 3 -sticky nsew
 
 	set cmd "::liquify::populate"
 	set b [button $w.f5.b1 -text "Fill!" -command $cmd]
-	grid $b -column 0 -row 0
+	grid $b -column 1 -row 0
 
 	set cmd "::liquify::reset"
 	set b [button $w.f5.b2 -text "Reset" -command $cmd]
-	grid $b -column 1 -row 0
+	grid $b -column 2 -row 0
+
+	# Frame containing some values calculated post-fill
+	grid [labelframe $w.f6 -text "Results"] \
+		-column 1 -row 3 -sticky news
+	
+	set l1 [label $w.f6.l1 -text "Randomly packed density:"]
+	set l2 [label $w.f6.l2 -textvariable ::liquify::density]
+	set cmd {
+		set ::liquify::density [format "%.4f g/mL" [::liquify::calc_density]]
+	}
+	set b [button $w.f6.b1 -text "Recalculate" -command $cmd]
+	grid $l1 -column 0 -row 0 -sticky e
+	grid $l2 -column 1 -row 0 -sticky w
+	grid $b -column 2 -row 0 -sticky e
+
+	set l1 [label $w.f6.l3 -text "Molecules added:"]
+	set l2 [label $w.f6.l4 -textvariable ::liquify::tot_resid]
+	grid $l1 -column 0 -row 1 -sticky e
+	grid $l2 -column 1 -row 1 -sticky w
 }
 
 #
@@ -158,6 +181,8 @@ proc ::liquify::populate {} {
 	variable PI
 	variable options
 	variable base_coords
+	variable density
+	variable tot_resid
 
 	vmdcon -info "Reset display field..."
 
@@ -223,7 +248,7 @@ proc ::liquify::populate {} {
 
 	# Scatter molecules randomly around in the box
 	vmdcon -info "Attempting to scatter $num_mols molecules..."
-	::liquify::scatter_molecules $diam
+	set tot_resid [::liquify::scatter_molecules $diam]
 	vmdcon -info "...done"
 
 	::liquify::save_reload $options(savefile)
@@ -244,6 +269,10 @@ proc ::liquify::populate {} {
 		return 1
 	}
 	vmdcon -info "...done"
+
+	vmdcon -info "Calculating randomly packed density..."
+	set density [format "%.4f g/mL" [::liquify::calc_density]]
+	vmdcon "density: $density\n...done"
 }
 
 #
@@ -281,15 +310,15 @@ proc ::liquify::scatter_molecules {diam} {
 
 	# Setup box boundaries
 	foreach n {x y z} {
-		set max$n [expr $options(x) / 2.0]
+		set max$n [expr $options($n) / 2.0]
 		set min$n [expr -[subst \$max$n]]
 	}
 
 	# Move one molecule at a time
 	foreach resid $resids {
 		set atoms [atomselect top "resid $resid"]
-		set new_xyz {}
-		set pdata {}
+		set test_data {} ;# proposed new coordinates
+		set test_data_wrapped {} ;# adjusted for PBC
 		set overlap 1 ;# initially "overlapped"
 		set failures 0
 
@@ -305,7 +334,6 @@ proc ::liquify::scatter_molecules {diam} {
 		# Translate and rotate a molecule
 		while {$overlap} {
 			incr failures
-			set new_xyz {}
 			
 			if {$failures > $options(niter)} {
 				vmdcon -info "Reached max iterations for placing molecules at residue: $resid"
@@ -317,17 +345,15 @@ proc ::liquify::scatter_molecules {diam} {
 			foreach n {x y z} {
 				$atoms move [transaxis $n [::liquify::random_angle]]
 			}
-			# Store translation in case it needs to be reversed
-			set offset [::liquify::random_xyz]
-			$atoms move [transoffset $offset]
-			set pdata [join [$atoms get {segid resid name x y z}]]
+			$atoms move [transoffset [::liquify::random_xyz]]
+
 			# Center of geometry - calculate before wrapping atoms for PBC	
 			set cog [measure center $atoms]
+			set test_data [join [$atoms get {segid resid radius name x y z}]]
 
 			# Adjust any atoms for PBC
-			foreach {segid resid radius name x y z} \
-				[join [$atoms get {segid resid radius name x y z}]] {
-				#puts "$segid $resid $radius $name $x $y $z"
+			set test_data_wrapped {}
+			foreach {segid resid radius name x y z} $test_data {
 				foreach n {x y z} {
 					set val [subst $$n]
 					if {$val < [subst \$min$n]} {
@@ -336,10 +362,10 @@ proc ::liquify::scatter_molecules {diam} {
 						set $n [expr $val - $options($n)]
 					}
 				}
-				lappend new_xyz [list $segid $resid $radius $name $x $y $z]
+				lappend test_data_wrapped [list $segid $resid $radius $name $x $y $z]
 			}
 
-			set overlap [::liquify::check_overlap $new_xyz $placed $cog $diam]
+			set overlap [::liquify::check_overlap $test_data_wrapped $placed $cog $diam]
 	
 			# If atoms overlapped, move atoms back to try again next loop
 			if {$overlap} {
@@ -351,20 +377,21 @@ proc ::liquify::scatter_molecules {diam} {
 		# If successfully placed molecules, give psfgen new coordinate
 		# information XXX
 		if {!$delete_mols} {
-			foreach {segid resid name x y z} $pdata {
+			foreach {segid resid radius name x y z} $test_data {
 				coord $segid $resid $name "$x $y $z"
 			}
 
 			lappend placed $resid
 		}
 	}
+	return [llength $placed]
 }
 
 #
 # Check the atomic overlap between two molecules.  Args refers to molecule being
 # scattered, atoms2 etc refer to already placed molecules.
 #
-proc ::liquify::check_overlap {pdata placed cog diam} {
+proc ::liquify::check_overlap {test_data_wrapped placed cog diam} {
 	variable options
 
 	# Only bother checking segments which have been "placed"
@@ -380,7 +407,7 @@ proc ::liquify::check_overlap {pdata placed cog diam} {
 
 		# Molecular spheres overlap, check every atom pair
 		set cdata [join [$atoms2 get {name radius x y z}]]
-		foreach {segid resid radius name x y z} [join $pdata] {
+		foreach {segid resid radius name x y z} [join $test_data_wrapped] {
 			foreach {name2 radius2 x2 y2 z2} $cdata {
 				set rcut [expr $radius + $radius2] ;# atomic radii may vary
 				set dist [vecdist "$x $y $z" "$x2 $y2 $z2"]
