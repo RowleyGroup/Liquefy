@@ -19,7 +19,6 @@ namespace eval ::liquify {
 	
 	# window handler
 	variable w
-	set w [toplevel .liquify]
 
 	# Simulation parameters
 	variable options
@@ -40,7 +39,6 @@ namespace eval ::liquify {
 # VMD menu calls this function when selected
 #
 proc ::liquify_tk {} {
-	::liquify::set_defaults
 	::liquify::build_gui
 	return $liquify::w
 }
@@ -50,8 +48,16 @@ proc ::liquify_tk {} {
 proc ::liquify::build_gui {} {
 	variable w
 	variable options
-	::liquify::set_defaults
+
+	# if window exists, pop up to front
+	if {[winfo exists .liquify]} {
+		 wm deiconify $w ;# bring to front
+		return
+	}
+
+	set w [toplevel .liquify]
 	wm title $w "Setup Molecular Liquid"
+	::liquify::set_defaults
 
 	set twidth 50 ;# text box width
 	set nwidth 5 ;# number box width
