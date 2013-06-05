@@ -36,6 +36,15 @@ namespace eval ::liquify {
 	set PI 3.1415926
 }
 
+#
+# VMD menu calls this function when selected
+#
+proc ::liquify_tk {} {
+	::liquify::set_defaults
+	::liquify::build_gui
+	return $liquify::w
+}
+
 # Build a window to allow user input of parameters
 # $w will be passed by global liquify_tk to VMD
 proc ::liquify::build_gui {} {
@@ -138,7 +147,10 @@ proc ::liquify::build_gui {} {
 	set b [button $w.f5.b1 -text "Fill!" -command $cmd]
 	grid $b -column 1 -row 0
 
-	set cmd "::liquify::reset"
+	set cmd {
+		::liquify::clear_mols
+		::liquify::set_defaults
+	}
 	set b [button $w.f5.b2 -text "Reset" -command $cmd]
 	grid $b -column 2 -row 0
 
@@ -163,11 +175,43 @@ proc ::liquify::build_gui {} {
 }
 
 #
-# Save new PDB and PSF files
+# Reset input fields to default
+#
+proc ::liquify::set_defaults {} {
+	variable options
+	set options(niter) 150
+	set options(pdb) "/home/leif/research/data/thiophene/thiophene.pdb"
+	set options(psf) "/home/leif/research/data/thiophene/thiophene.psf"
+	set options(top) "/home/leif/research/data/thiophene/thiophene.rtf"
+	set options(savedir) $::env(PWD)
+	set options(savefile) myliquid
+	set options(cube) 0
+	set options(reject) 1
+	set options(density) 0.74 ;# hexagonal close packing for spheres
+	foreach n {x y z} {
+		set options($n) 30
+	}
+}
+
+#
+# Unload all molecules
+# Reasoning: for setting up liquids -> no other molecules
+#
+proc ::liquify::clear_mols {} {
+	vmdcon -info "Removing [molinfo num] molecules"
+	set idlist [molinfo list]
+	foreach id $idlist {
+		mol delete $id
+	}
+	resetpsf
+	vmdcon -info "...done"
+}
+
+#
+# Save new PDB and PSF files. Reload new data.
 # 
 proc ::liquify::save_reload {name} {
-	# TODO catch errors
-	writepdb $name.pdb
+	writepdb $name.pdb ;# do not return values
 	writepsf $name.psf
 
 	mol delete [molinfo top]
@@ -175,14 +219,27 @@ proc ::liquify::save_reload {name} {
 }
 
 #
-# Start populating the box
+# Need to validate user input
 #
-proc ::liquify::populate {} {
-	variable PI
+proc ::liquify::validate_input {} {
+	variable w
 	variable options
-	variable base_coords
-	variable density
-	variable tot_resid
+	vmdcon -info "Input validation..."
+
+	# Check savefile is not empty
+	if {[llength $options(savefile)] == 0} {
+		vmdcon -err "Save file name empty! Halting."
+		return 0
+	}
+
+	# Check if write files exist already and prompt for overwrite
+	if {[file exists $options(savefile).pdb] || \
+		[file exists $options(savefile).psf] || \
+		[file exists $options(savefile).xsc]} {
+			set val [tk_messageBox -icon warning -type okcancel -title Message -parent $w \
+				-message "Some project files $options(savefile).{pdb psf xsc} exist! Overwrite?"]
+      		if {$val == "cancel"} { return 0 }
+   	}
 
 	vmdcon -info "Reset display field..."
 
@@ -194,17 +251,18 @@ proc ::liquify::populate {} {
 	vmdcon -info "Loading PBD file \{$options(pdb)\}..."
 	if [catch {mol new $options(pdb) type pdb} err] {
 		vmdcon -info "Halting box fill!"
-		return 1
+		return 0 ;# False
 	}
 	vmdcon -info "...done"
 	# Load structure information into new molecule
 	vmdcon -info "Loading PSF data into new molecule..."
 	if [catch {mol addfile $options(psf) type psf} err] {
 		vmdcon -info "Halting box fill!"
-		return 1
+		return 0
 	}
 	vmdcon -info "...done"
 	topology $options(top)
+
 
 	# Check box dimensions
 	# values will be ints (entry validation)
@@ -217,10 +275,28 @@ proc ::liquify::populate {} {
 		if {$options($i) <= 0} {
 			vmdcon -err "Box dimensions must be greater than 0!"
 			vmdcon -info "Halting box fill!"
-			return 1
+			return 0
 		}
 	}
-	
+	return 1
+}
+
+#
+# Run setup with given parameters
+#
+proc ::liquify::populate {} {
+	variable PI
+	variable options
+	variable base_coords
+	variable density
+	variable tot_resid
+
+	# Validate input
+	if ![::liquify::validate_input] {
+		vmdcon -err "Could not validate input"
+		return 0
+	}
+
 	# Retrive info from parent molecule
 	set atoms [atomselect top all] ;# Select all atoms
 	set base_coords [$atoms get {resname name x y z}] ;# Use for relative atom coords
@@ -228,6 +304,7 @@ proc ::liquify::populate {} {
 	set radius [expr $diam / 2.0] ;# Molecular radius
 	set resnames [lsort -unique [$atoms get resname]] ;# Residue names
 	mol delete [molinfo top] ;# Remove molecule
+	
 	# Estimate number of molecules based on geometry
 	set vol_box [expr $options(x) * $options(y) * $options(z)]
 	set vol_sphere [expr 4.0 * $PI * ($radius**3) / 3.0]
@@ -237,7 +314,7 @@ proc ::liquify::populate {} {
 	# could start adding new segments XXX
 	if {$num_mols > 99999} {
 		vmdcon -warn "Too many molecules (>99999) would mess up resid. Halting."
-		return 1
+		return 0
 	}
 
 	# Replicate parent molecule
@@ -266,7 +343,7 @@ proc ::liquify::populate {} {
 	vmdcon -info "Writing xsc file..."
 	if ![::liquify::write_xsc] {
 		vmdcon -err "Write to xsc file failed. Halting"
-		return 1
+		return 0
 	}
 	vmdcon -info "...done"
 
@@ -280,7 +357,6 @@ proc ::liquify::populate {} {
 # blank -> unassigned coordinates
 # 
 proc ::liquify::generate_blanks {n resnames} {
-	#variable options
 	variable segname
 
 	segment $segname {
@@ -422,15 +498,6 @@ proc ::liquify::check_overlap {test_data_wrapped placed cog diam} {
 }
 
 #
-# Clear all input and loaded molecules
-#
-proc ::liquify::reset {} {
-	variable options
-	::liquify::clear_mols
-	::liquify::set_defaults
-}
-
-#
 #
 #
 proc ::liquify::write_xsc {} {
@@ -472,25 +539,6 @@ proc ::liquify::calc_density {} {
 }
 
 #
-# Reset input fields to default TODO remove
-#
-proc ::liquify::set_defaults {} {
-	variable options
-	set options(niter) 150
-	set options(pdb) "/home/leif/research/data/thiophene/thiophene.pdb"
-	set options(psf) "/home/leif/research/data/thiophene/thiophene.psf"
-	set options(top) "/home/leif/research/data/thiophene/thiophene.rtf"
-	set options(savedir) $::env(PWD)
-	set options(savefile) myliquid
-	set options(cube) 0
-	set options(reject) 1
-	set options(density) 0.74 ;# hexagonal close packing for spheres
-	foreach n {x y z} {
-		set options($n) 30
-	}
-}
-
-#
 # Return {x y z} list of random points within periodic box
 # 
 proc ::liquify::random_xyz {} {
@@ -510,35 +558,3 @@ proc ::liquify::random_angle {} {
 	return [expr (360.0 * rand())]
 }
 
-#
-# Unload all molecules
-# Reasoning: for setting up liquids -> no other molecules
-# can just delete a few after to put in another foreign molecule
-# if desired
-#
-proc ::liquify::clear_mols {} {
-	vmdcon -info "Removing [molinfo num] molecules"
-	set idlist [molinfo list]
-	foreach id $idlist {
-		mol delete $id
-	}
-	resetpsf
-	vmdcon -info "...done"
-}
-
-#
-# VMD menu calls this function when selected
-#
-proc ::liquify_tk {} {
-	::liquify::set_defaults
-	::liquify::build_gui
-	return $liquify::w
-}
-
-#
-# Need to validate user input
-#
-proc ::liquify::validate_input {} {
-	variable options
-	vmdcon -info "Input validation..."
-}
