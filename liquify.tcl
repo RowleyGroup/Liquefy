@@ -186,9 +186,9 @@ proc ::liquify::build_gui {} {
 proc ::liquify::set_defaults {} {
 	variable options
 	set options(niter) 150
-	set options(pdb) "/home/leif/research/data/thiophene/thiophene.pdb"
-	set options(psf) "/home/leif/research/data/thiophene/thiophene.psf"
-	set options(top) "/home/leif/research/data/thiophene/thiophene.rtf"
+	set options(pdb) ""
+	set options(psf) ""
+	set options(top) ""
 	set options(savedir) $::env(PWD)
 	set options(savefile) myliquid
 	set options(cube) 0
@@ -205,11 +205,11 @@ proc ::liquify::set_defaults {} {
 #
 proc ::liquify::clear_mols {} {
 	vmdcon -info "Removing [molinfo num] molecules"
+	psfcontext reset
 	set idlist [molinfo list]
 	foreach id $idlist {
 		mol delete $id
 	}
-	resetpsf
 	vmdcon -info "...done"
 }
 
@@ -232,6 +232,7 @@ proc ::liquify::validate_input {} {
 	variable options
 	vmdcon -info "Input validation..."
 
+
 	# Check savefile is not empty
 	if {[llength $options(savefile)] == 0} {
 		vmdcon -err "Save file name empty! Halting."
@@ -239,9 +240,10 @@ proc ::liquify::validate_input {} {
 	}
 
 	# Check if write files exist already and prompt for overwrite
-	if {[file exists $options(savefile).pdb] || \
-		[file exists $options(savefile).psf] || \
-		[file exists $options(savefile).xsc]} {
+	set basename "$options(savedir)/$options(savefile)"
+	if {[file exists $basename.pdb] || \
+		[file exists $basename.psf] || \
+		[file exists $basename.xsc]} {
 			set val [tk_messageBox -icon warning -type okcancel -title Message -parent $w \
 				-message "Some project files $options(savefile).{pdb psf xsc} exist! Overwrite?"]
       		if {$val == "cancel"} { return 0 }
@@ -305,6 +307,7 @@ proc ::liquify::populate {} {
 
 	# Retrive info from parent molecule
 	set atoms [atomselect top all] ;# Select all atoms
+	# OK
 	set base_coords [$atoms get {resname name x y z}] ;# Use for relative atom coords
 	set diam [vecdist {*}[measure minmax $atoms]] ;# Estimate molecular diameter
 	set radius [expr $diam / 2.0] ;# Molecular radius
@@ -327,14 +330,14 @@ proc ::liquify::populate {} {
 	::liquify::generate_blanks $num_mols $resnames
 
 	# It seems necessary to write to file and reload XXX
-	::liquify::save_reload $options(savefile)
+	::liquify::save_reload "$options(savedir)/$options(savefile)"
 
 	# Scatter molecules randomly around in the box
 	vmdcon -info "Attempting to scatter $num_mols molecules..."
 	set tot_resid [::liquify::scatter_molecules $diam]
 	vmdcon -info "...done"
 
-	::liquify::save_reload $options(savefile)
+	::liquify::save_reload "$options(savedir)/$options(savefile)"
 
 	# Use pbctools to draw periodic box
 	pbc set "$options(x) $options(y) $options(z)" -all
