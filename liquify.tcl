@@ -1,13 +1,10 @@
+########################################################################
+# Setup Molecular Liquid
+# -A plugin for written for VMD-
 #
-#
-#
-# liquidgen plugin for VMD
-# Setup a Molecular Liquid Simulation 
-#
-#
-#
-#
-#
+# Author: Leif Hickey
+# Contact: leif.hickey@mun.ca
+########################################################################
 
 package provide liquify 1.0
 package require psfgen
@@ -125,6 +122,12 @@ proc ::liquify::build_gui {} {
 	grid $l -column 0 -row 2 -sticky e
 	grid $e -column 1 -row 2 -sticky w
 
+	set l [label $w.f4.l4 -text "Adjust atomic radii"]
+	set e [entry $w.f4.e2 -textvariable ::liquify::options(adj_radii) \
+	-width $nwidth -validate key -vcmd {string is double %P}]
+	grid $l -column 0 -row 3 -sticky e
+	grid $e -column 1 -row 3 -sticky w
+
 	# Save new PDB and PSF files
 	grid [labelframe $w.f3 -text "Save New Data"] \
 		-columnspan 2 -rowspan 1 -sticky news
@@ -193,9 +196,12 @@ proc ::liquify::set_defaults {} {
 	set options(savefile) myliquid
 	set options(cube) 0
 	set options(reject) 1
-	set options(density) 0.74 ;# hexagonal close packing for spheres
+	set options(adj_radii) 1.0
+	set options(density) 1.0 ;# hexagonal close packing for spheres
 	foreach n {x y z} {
 		set options($n) 30
+	set ::liquify::tot_resid 0
+	set ::liquify::density {0.0 g/mL}
 	}
 }
 
@@ -286,6 +292,25 @@ proc ::liquify::validate_input {} {
 			return 0
 		}
 	}
+
+	if [expr $options(density) <= 0] {
+		vmdcon -err "Sphere packing estimate has to be greater than 0!"
+		vmdcon -info "Halting box fill!"
+		return 0
+	}
+
+	if [expr $options(adj_radii) <= 0] {
+		vmdcon -err "Atomic radii adjustment has to be greater than 0!"
+		vmdcon -info "Halting box fill!"
+		return 0
+	}
+	
+	if [expr $options(niter) <= 0] {
+		vmdcon -err "Failed iteration cutoff has to be greater than 0!"
+		vmdcon -info "Halting box fill!"
+		return 0
+	}
+
 	return 1
 }
 
@@ -334,7 +359,7 @@ proc ::liquify::populate {} {
 
 	# Scatter molecules randomly around in the box
 	vmdcon -info "Attempting to scatter $num_mols molecules..."
-	set tot_resid [::liquify::scatter_molecules $diam]
+	set tot_resid "[::liquify::scatter_molecules $diam] (of $num_mols)"
 	vmdcon -info "...done"
 
 	::liquify::save_reload "$options(savedir)/$options(savefile)"
@@ -494,7 +519,7 @@ proc ::liquify::check_overlap {test_data_wrapped placed cog diam} {
 		set cdata [join [$atoms2 get {name radius x y z}]]
 		foreach {segid resid radius name x y z} [join $test_data_wrapped] {
 			foreach {name2 radius2 x2 y2 z2} $cdata {
-				set rcut [expr $radius + $radius2] ;# atomic radii may vary
+				set rcut [expr $options(adj_radii) * ($radius + $radius2)] ;# atomic radii may vary
 				set dist [vecdist "$x $y $z" "$x2 $y2 $z2"]
 				if {$dist < $rcut} {
 					# Atomic overlap, reject move
