@@ -1,0 +1,14 @@
+set auto_path "$env(HOME)/vmdplugins $auto_path"
+menu main on
+vmd_install_extension liquify liquify_tk "Simulation/Setup Molecular Liquid"
+
+
+# for plugin testing
+proc reload {} {
+	global liquify
+	if [info exists liquify] {
+		destroy $liquify
+	}
+	source /home/leif/vmdplugins/liquify/liquify.tcl
+	set liquify [liquify_tk]
+}
