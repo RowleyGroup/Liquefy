@@ -532,7 +532,7 @@ proc ::liquify::check_overlap {test_data_wrapped placed cog diam} {
 }
 
 #
-#
+# Write a XSC file used by NAMD to setup PBC
 #
 proc ::liquify::write_xsc {} {
 	variable options
@@ -553,7 +553,7 @@ proc ::liquify::write_xsc {} {
 }
 
 #
-#
+# Calculate the density of the active molecule
 #
 proc ::liquify::calc_density {} {
 	set resids [lsort -integer -unique [[atomselect top all] get resid]]
@@ -586,7 +586,7 @@ proc ::liquify::random_xyz {} {
 }
 
 #
-#
+# Return a random angle
 #
 proc ::liquify::random_angle {} {
 	return [expr (360.0 * rand())]
