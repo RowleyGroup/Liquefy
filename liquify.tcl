@@ -127,7 +127,7 @@ proc ::liquify::build_gui {} {
 	grid $l -column 0 -row 1 -sticky e
 	grid $c -column 1 -row 1 -sticky w
 
-	set l [label $w.f4.l3 -text "Sphere packing estimate"]
+	set l [label $w.f4.l3 -text "Density estimate (g/mL)"]
 	set e [entry $w.f4.e1 -textvariable ::liquify::options(density) \
 	-width $nwidth -validate key -vcmd {string is double %P}]
 	grid $l -column 0 -row 2 -sticky e
@@ -348,13 +348,17 @@ proc ::liquify::populate {} {
 	set diam [vecdist {*}[measure minmax $atoms]] ;# Estimate molecular diameter
 	set radius [expr $diam / 2.0] ;# Molecular radius
 	set resnames [lsort -unique [$atoms get resname]] ;# Residue names
-	mol delete [molinfo top] ;# Remove molecule
 	
-	# Estimate number of molecules based on geometry
-	set vol_box [expr $options(x) * $options(y) * $options(z)]
-	set vol_sphere [expr 4.0 * $PI * ($radius**3) / 3.0]
-	set num_mols [expr ($vol_box * $options(density)) / $vol_sphere]
-	set num_mols [expr round($num_mols)]
+	# Estimate number of molecules based on mass/density
+	set mol_mass [measure sumweights $atoms weight mass] ;# molar mass
+	set mol_mass [expr $mol_mass / 6.022e23] ;# mass one molecule
+	set params [join [pbc get -now]]
+	set A3_to_mL 1.0e-24 ;# cubic angstroms to mL conversion
+	set vol [expr $options(x) * $options(y) * $options(z) * $A3_to_mL]
+	set num_mols [expr round($options(density) * $vol / $mol_mass)]
+
+	mol delete [molinfo top] ;# Remove molecule
+
 	# Residue names can only be 1-5 characters
 	# could start adding new segments XXX
 	if {$num_mols > 99999} {
@@ -578,8 +582,8 @@ proc ::liquify::calc_density {} {
 	set x [lindex $params 0]
 	set y [lindex $params 1]
 	set z [lindex $params 2]
-	set A3TOmL 1.0e-24 ;# cubic angstroms to mL conversion
-	set vol [expr $x * $y * $z * $A3TOmL]
+	set A3_to_mL 1.0e-24 ;# cubic angstroms to mL conversion
+	set vol [expr $x * $y * $z * $A3_to_mL]
 	return [expr $tot_mass / $vol] ;# g/mL
 }
 
