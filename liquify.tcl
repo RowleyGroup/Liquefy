@@ -1,5 +1,5 @@
 ########################################################################
-# Setup Molecular Liquid
+# Build Molecular Liquid
 # -A plugin for written for VMD-
 #
 # Author: Leif Hickey
@@ -53,7 +53,7 @@ proc ::liquify::build_gui {} {
 	}
 
 	set w [toplevel .liquify]
-	wm title $w "Setup Molecular Liquid"
+	wm title $w "Build Molecular Liquid"
 	::liquify::set_defaults
 
 	set twidth 50 ;# text box width
@@ -64,7 +64,7 @@ proc ::liquify::build_gui {} {
 	
 	# Frame containing PBD and PSF input fields
 	# PDB File
-	grid [labelframe $w.f1 -text "Load Molecule"] \
+	grid [labelframe $w.f1 -text "Input Files of Molecule"] \
 		-columnspan 2 -rowspan 1 -sticky news
 
 	set row 0
@@ -95,8 +95,19 @@ proc ::liquify::build_gui {} {
 		incr row
 	}
 
-	set l [label $w.f2.l4 -text "Use Cube"]
-	set c [checkbutton $w.f2.c1 -variable ::liquify::options(cube)]
+	set cmd {
+		if {$::liquify::options(cube)} {
+			$::liquify::w.f2.y-e1 config -state readonly
+			$::liquify::w.f2.z-e1 config -state readonly
+		} else {
+			$::liquify::w.f2.y-e1 config -state normal
+			$::liquify::w.f2.z-e1 config -state normal
+		}
+	}
+			
+	set l [label $w.f2.l4 -text "Cubic Periodic Cell"]
+	set c [checkbutton $w.f2.c1 -variable ::liquify::options(cube) \
+		-command $cmd]
 	grid $l -column 2 -row 0 -sticky e
 	grid $c -column 3 -row 0 -sticky w
 
@@ -122,14 +133,14 @@ proc ::liquify::build_gui {} {
 	grid $l -column 0 -row 2 -sticky e
 	grid $e -column 1 -row 2 -sticky w
 
-	set l [label $w.f4.l4 -text "Adjust atomic radii"]
+	set l [label $w.f4.l4 -text "Scaling factor for van der Waals radii"]
 	set e [entry $w.f4.e2 -textvariable ::liquify::options(adj_radii) \
 	-width $nwidth -validate key -vcmd {string is double %P}]
 	grid $l -column 0 -row 3 -sticky e
 	grid $e -column 1 -row 3 -sticky w
 
 	# Save new PDB and PSF files
-	grid [labelframe $w.f3 -text "Save New Data"] \
+	grid [labelframe $w.f3 -text "Save Location for New Data"] \
 		-columnspan 2 -rowspan 1 -sticky news
 	
 	set l [label $w.f3.l1 -text "Location"] 

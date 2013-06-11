@@ -1,6 +1,6 @@
 set auto_path "$env(HOME)/vmdplugins $auto_path"
 menu main on
-vmd_install_extension liquify liquify_tk "Simulation/Setup Molecular Liquid"
+vmd_install_extension liquify liquify_tk "Modeling/Setup Molecular Liquid"
 
 
 # for plugin testing
