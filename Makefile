@@ -8,7 +8,7 @@ install: liquify.tcl pkgIndex.tcl vmdrc
 	mkdir -p ${installdir}
 	cp liquify.tcl ${installdir}/
 	cp pkgIndex.tcl ${installdir}/
-	cp vmdrc ${HOME}/.vmdrc
+	cat vmdrc >> ${HOME}/.vmdrc
 
 pkgIndex.tcl:
 	@echo "Generating pkgIndex.tcl ..."
