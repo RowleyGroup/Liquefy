@@ -7,9 +7,10 @@
 ## for the liquid.                                                    ##
 ##                                                                    ##
 ## Version: 1.0                                                       ##
-## Author: Leif Hickey                                                ##
-## Contact: leif.hickey@mun.ca                                        ##
-## Date: 06/12/13                                                     ##
+## Authors: Leif Hickey and Christopher N. Rowley                     ##
+## Contact: leif.hickey@mun.ca, cnrowley@mun.ca                       ##
+## http://www.mun.ca/compchem                                         ##
+## Date: 06/13/13                                                     ##
 ## ################################################################## ##
 
 package provide liquify 1.0
@@ -55,8 +56,10 @@ proc ::liquify::liquify { args } {
 	puts pass
 }
 
+##
 ## Build a window to allow user input of parameters
 ## $w will be passed by global liquify_tk to VMD
+##
 proc ::liquify::build_gui {} {
 	variable w
 	variable options
