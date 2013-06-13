@@ -1,20 +1,26 @@
-########################################################################
-# Build Molecular Liquid
-# -A plugin for written for VMD-
-#
-# Author: Leif Hickey
-# Contact: leif.hickey@mun.ca
-########################################################################
+## ################################################################## ##
+## Liquify - Build a Molecular Liquid								  ##
+##   -A plugin for written for VMD-                                   ##
+##                                                                    ##
+## Given a parent molecule, this plugin constructs a liquid contained ##
+## within a periodic cell.  New PDB, PSF, and XSC files are written   ##
+## for the liquid.                                                    ##
+##                                                                    ##
+## Version: 1.0                                                       ##
+## Author: Leif Hickey                                                ##
+## Contact: leif.hickey@mun.ca                                        ##
+## Date: 06/12/13                                                     ##
+## ################################################################## ##
 
 package provide liquify 1.0
 package require psfgen
 package require pbctools
 
-# Setup namespace to prevent plugin conflicts
+## Create namespace to prevent plugin conflicts
 namespace eval ::liquify {
 	#namespace export liquify
 	
-	# window handler
+	# window handle
 	variable w
 
 	# Simulation parameters
@@ -28,27 +34,35 @@ namespace eval ::liquify {
 
 	# Constants
 	variable PI
-	#set PI $math::constants::pi
 	set PI 3.1415926
+	variable A3_to_mL
+	set A3_to_mL 1.0e-24 ;# cubic angstroms to mL conversion
 }
 
-#
-# VMD menu calls this function when selected
-#
+##
+## VMD menu calls this function to pop up GUI
+##
 proc ::liquify_tk {} {
 	::liquify::build_gui
 	return $liquify::w
 }
 
-# Build a window to allow user input of parameters
-# $w will be passed by global liquify_tk to VMD
+##
+## CLI call
+##
+proc ::liquify::liquify { args } {
+	#if ![llength $args]
+	puts pass
+}
+
+## Build a window to allow user input of parameters
+## $w will be passed by global liquify_tk to VMD
 proc ::liquify::build_gui {} {
 	variable w
 	variable options
 
-	# if window exists, pop up to front
 	if {[winfo exists .liquify]} {
-		 wm deiconify $w ;# bring to front
+		 wm deiconify $w ;# Bring window to front
 		return
 	}
 
@@ -63,7 +77,6 @@ proc ::liquify::build_gui {} {
 	# or they refer to global vars
 	
 	# Frame containing PBD and PSF input fields
-	# PDB File
 	grid [labelframe $w.f1 -text "Input Files of Molecule"] \
 		-columnspan 2 -rowspan 1 -sticky news
 
@@ -139,7 +152,7 @@ proc ::liquify::build_gui {} {
 	grid $l -column 0 -row 3 -sticky e
 	grid $e -column 1 -row 3 -sticky w
 
-	# Save new PDB and PSF files
+	# Frame containing new save location
 	grid [labelframe $w.f3 -text "Save Location for New Data"] \
 		-columnspan 2 -rowspan 1 -sticky news
 	
@@ -159,7 +172,7 @@ proc ::liquify::build_gui {} {
 	grid $e -column 1 -row 1 -sticky ew
 	#grid $b -column 2 -row 1
 	
-	# Frame containing generate and reset buttons
+	# Frame containing Fill and Reset buttons
 	grid [labelframe $w.f5 -text "Populate Box"] \
 		-column 0 -row 3 -sticky nsew
 
@@ -174,7 +187,7 @@ proc ::liquify::build_gui {} {
 	set b [button $w.f5.b2 -text "Reset" -command $cmd]
 	grid $b -column 2 -row 0
 
-	# Frame containing some values calculated post-fill
+	# Frame containing post-population results
 	grid [labelframe $w.f6 -text "Results"] \
 		-column 1 -row 3 -sticky news
 	
@@ -194,9 +207,9 @@ proc ::liquify::build_gui {} {
 	grid $l2 -column 1 -row 1 -sticky w
 }
 
-#
-# Reset input fields to default
-#
+##
+## Reset input and results to default
+##
 proc ::liquify::set_defaults {} {
 	variable options
 	set options(niter) 150
@@ -208,7 +221,7 @@ proc ::liquify::set_defaults {} {
 	set options(cube) 0
 	set options(reject) 1
 	set options(adj_radii) 1.0
-	set options(density) 1.0 ;# hexagonal close packing for spheres
+	set options(density) 1.0
 	foreach n {x y z} {
 		set options($n) 30
 	set ::liquify::tot_resid 0
@@ -216,10 +229,9 @@ proc ::liquify::set_defaults {} {
 	}
 }
 
-#
-# Unload all molecules
-# Reasoning: for setting up liquids -> no other molecules
-#
+##
+## Create a 'clean' state to build the liquid in
+##
 proc ::liquify::clear_mols {} {
 	vmdcon -info "Removing [molinfo num] molecules"
 	psfcontext reset
@@ -230,33 +242,34 @@ proc ::liquify::clear_mols {} {
 	vmdcon -info "...done"
 }
 
-#
-# Save new PDB and PSF files. Reload new data.
-# 
+##
+## Save PDB/PSF data and reload. Called after constructing new segment
+## and changing coordinates.
+##
 proc ::liquify::save_reload {name} {
-	writepdb $name.pdb ;# do not return values
+	writepdb $name.pdb
 	writepsf $name.psf
 
 	mol delete [molinfo top]
 	mol load psf $name.psf pdb $name.pdb
 }
 
-#
-# Need to validate user input
-#
+##
+## Returns 1 (true) for valid user input.
+## Loads parent molecule.
+##
 proc ::liquify::validate_input {} {
 	variable w
 	variable options
 	vmdcon -info "Input validation..."
 
 
-	# Check savefile is not empty
 	if {[llength $options(savefile)] == 0} {
-		vmdcon -err "Save file name empty! Halting."
+		vmdcon -err "No save filename given! Halting."
 		return 0
 	}
 
-	# Check if write files exist already and prompt for overwrite
+	# User confirm to overwrite existing files
 	set basename "$options(savedir)/$options(savefile)"
 	if {[file exists $basename.pdb] || \
 		[file exists $basename.psf] || \
@@ -267,30 +280,25 @@ proc ::liquify::validate_input {} {
    	}
 
 	vmdcon -info "Reset display field..."
-
-	# Remove any molecules currently loaded
 	::liquify::clear_mols
 	vmdcon -info "Populating..."
 
-	# Add new molecule
-	vmdcon -info "Loading PBD file \{$options(pdb)\}..."
+	vmdcon -info "Loading PBD file for parent molecule \{$options(pdb)\}..."
 	if [catch {mol new $options(pdb) type pdb} err] {
-		vmdcon -info "Halting box fill!"
-		return 0 ;# False
-	}
-	vmdcon -info "...done"
-	# Load structure information into new molecule
-	vmdcon -info "Loading PSF data into new molecule..."
-	if [catch {mol addfile $options(psf) type psf} err] {
-		vmdcon -info "Halting box fill!"
+		vmdcon -err "Could not load PDB file! Halting box fill."
 		return 0
 	}
-	vmdcon -info "...done"
+	
+	vmdcon -info "Loading PSF data into parent molecule..."
+	if [catch {mol addfile $options(psf) type psf} err] {
+		vmdcon -info "Could not load PSF data! Halting box fill."
+		return 0
+	}
+
+	vmdcon -info "Loading topology from $options(top)..."
 	topology $options(top)
 
-
-	# Check box dimensions
-	# values will be ints (entry validation)
+	# Adjust y,z for cubic periodic cell
 	if $options(cube) {
 		foreach i {y z} {
 			set options($i) $options(x)
@@ -305,13 +313,14 @@ proc ::liquify::validate_input {} {
 	}
 
 	if [expr $options(density) <= 0] {
-		vmdcon -err "Sphere packing estimate has to be greater than 0!"
+		vmdcon -err "Density estimate has to be greater than 0!"
 		vmdcon -info "Halting box fill!"
 		return 0
 	}
 
 	if [expr $options(adj_radii) <= 0] {
-		vmdcon -err "Atomic radii adjustment has to be greater than 0!"
+		vmdcon -err "Scaling factor for van der Waals radii has to be \
+			greater than 0!"
 		vmdcon -info "Halting box fill!"
 		return 0
 	}
@@ -325,42 +334,40 @@ proc ::liquify::validate_input {} {
 	return 1
 }
 
-#
-# Run setup with given parameters
-#
+##
+## Create a liquid from parent molecule.
+## Returns 1 (true) for success
+##
 proc ::liquify::populate {} {
 	variable PI
+	variable A3_to_mL
 	variable options
 	variable base_coords
 	variable density
 	variable tot_resid
 
-	# Validate input
 	if ![::liquify::validate_input] {
-		vmdcon -err "Could not validate input"
+		vmdcon -err "Could not validate input! Halting."
 		return 0
 	}
 
-	# Retrive info from parent molecule
-	set atoms [atomselect top all] ;# Select all atoms
-	# OK
-	set base_coords [$atoms get {resname name x y z}] ;# Use for relative atom coords
-	set diam [vecdist {*}[measure minmax $atoms]] ;# Estimate molecular diameter
-	set radius [expr $diam / 2.0] ;# Molecular radius
-	set resnames [lsort -unique [$atoms get resname]] ;# Residue names
+	# Store info parsed from parent molecule
+	set atoms [atomselect top all]
+	set base_coords [$atoms get {resname name x y z}] ;# Relative atom coords
+	set diam [vecdist {*}[measure minmax $atoms]] ;# Estimate molecular sphere diameter
+	set radius [expr $diam / 2.0]
+	set resnames [lsort -unique [$atoms get resname]]
 	
-	# Estimate number of molecules based on mass/density
+	# Estimate number of molecules needed based on density
 	set mol_mass [measure sumweights $atoms weight mass] ;# molar mass
 	set mol_mass [expr $mol_mass / 6.022e23] ;# mass one molecule
-	set params [join [pbc get -now]]
-	set A3_to_mL 1.0e-24 ;# cubic angstroms to mL conversion
 	set vol [expr $options(x) * $options(y) * $options(z) * $A3_to_mL]
 	set num_mols [expr round($options(density) * $vol / $mol_mass)]
 
-	mol delete [molinfo top] ;# Remove molecule
+	mol delete [molinfo top] ;# Remove parent molecule
 
 	# Residue names can only be 1-5 characters
-	# could start adding new segments XXX
+	# TODO could start adding new segments
 	if {$num_mols > 99999} {
 		vmdcon -warn "Too many molecules (>99999) would mess up resid. Halting."
 		return 0
@@ -369,42 +376,40 @@ proc ::liquify::populate {} {
 	# Replicate parent molecule
 	::liquify::generate_blanks $num_mols $resnames
 
-	# It seems necessary to write to file and reload XXX
+	# It seems necessary to write to file and reload
 	::liquify::save_reload "$options(savedir)/$options(savefile)"
 
 	# Scatter molecules randomly around in the box
 	vmdcon -info "Attempting to scatter $num_mols molecules..."
 	set tot_resid "[::liquify::scatter_molecules $diam] (of $num_mols)"
-	vmdcon -info "...done"
 
 	::liquify::save_reload "$options(savedir)/$options(savefile)"
 
-	# Use pbctools to draw periodic box
 	pbc set "$options(x) $options(y) $options(z)" -all
-	pbc box -center origin ;# draw box
+	pbc box -center origin ;# draw periodic box
 
 	# Represent molecules in Licorice style
 	mol modstyle 0 top Licorice 0.300000 10.000000 10.000000
 
 	vmdcon -info "Finished molecule replication"
 
-	# Save XSC file containing cell basis vectors
+	# Create XSC file for use with NAMD
 	vmdcon -info "Writing xsc file..."
 	if ![::liquify::write_xsc] {
 		vmdcon -err "Write to xsc file failed. Halting"
 		return 0
 	}
-	vmdcon -info "...done"
 
 	vmdcon -info "Calculating randomly packed density..."
 	set density [format "%.4f g/mL" [::liquify::calc_density]]
-	vmdcon "density: $density\n...done"
+	vmdcon "density: $density\n"
+
+	return 1
 }
 
-#
-# Make n "blank" copies of parent molecule
-# blank -> unassigned coordinates
-# 
+##
+## Create n copies of parent molecule using psfgen.
+## 
 proc ::liquify::generate_blanks {n resnames} {
 	variable segname
 
@@ -419,27 +424,28 @@ proc ::liquify::generate_blanks {n resnames} {
 	}
 }
 
-#
-# Set random coordinates for every molecule present
-# Separation by resid
-#
+##
+## "Fill" the box by placing molecules randomly within the periodic
+## boundaries. Returns the number of placed molecules (0 for failure).
+##
 proc ::liquify::scatter_molecules {diam} {
 	variable options
 	variable base_coords
 	variable segname
 
-	set allatoms [atomselect top all]
-	set resids [lsort -integer -unique [$allatoms get resid]]
-	set delete_mols 0
-	set placed {}
+	set all_atoms [atomselect top all]
+	set resids [lsort -integer -unique [$all_atoms get resid]]
+	set delete_mols 0 ;# Flag which switches the loop function
+	set placed {} ;# List of finished molecules
 
-	# Setup box boundaries
+	# Box boundaries with origin at centre
 	foreach n {x y z} {
 		set max$n [expr $options($n) / 2.0]
 		set min$n [expr -[subst \$max$n]]
 	}
 
-	# Move one molecule at a time
+	# Move one molecule at a time while delete_mols is 0.
+	# Delete remaining molecules when delete_mols is 1.
 	foreach resid $resids {
 		set atoms [atomselect top "resid $resid"]
 		set test_data {} ;# proposed new coordinates
@@ -472,7 +478,7 @@ proc ::liquify::scatter_molecules {diam} {
 			}
 			$atoms move [transoffset [::liquify::random_xyz]]
 
-			# Center of geometry - calculate before wrapping atoms for PBC	
+			# New center of geometry
 			set cog [measure center $atoms]
 			set test_data [join [$atoms get {segid resid radius name x y z}]]
 
@@ -492,15 +498,14 @@ proc ::liquify::scatter_molecules {diam} {
 
 			set overlap [::liquify::check_overlap $test_data_wrapped $placed $cog $diam]
 	
-			# If atoms overlapped, move atoms back to try again next loop
+			# Reset coords if atoms are overlapped
 			if {$overlap} {
 				$atoms set {resname name x y z} $base_coords
 			}
 
 		}
 
-		# If successfully placed molecules, give psfgen new coordinate
-		# information XXX
+		# Record coordinates for psfgen
 		if {!$delete_mols} {
 			foreach {segid resid radius name x y z} $test_data {
 				coord $segid $resid $name "$x $y $z"
@@ -512,10 +517,11 @@ proc ::liquify::scatter_molecules {diam} {
 	return [llength $placed]
 }
 
-#
-# Check the atomic overlap between two molecules.  Args refers to molecule being
-# scattered, atoms2 etc refer to already placed molecules.
-#
+##
+## Check the atomic overlap between two molecules.
+## args -> molecule being scattered
+## <varname>2 -> already placed molecule
+##
 proc ::liquify::check_overlap {test_data_wrapped placed cog diam} {
 	variable options
 
@@ -526,6 +532,7 @@ proc ::liquify::check_overlap {test_data_wrapped placed cog diam} {
 		set dr [vecdist $cog $cog2]
 		
 		# Use early rejection to prevent uncessesary checks
+		# TODO remove option from GUI
 		if {$options(reject) && $dr >= $diam} {
 			continue
 		}
@@ -546,18 +553,20 @@ proc ::liquify::check_overlap {test_data_wrapped placed cog diam} {
 	return 0 ;# No atomic overlap, accept move
 }
 
-#
-# Write a XSC file used by NAMD to setup PBC
-#
+##
+## Save XSC file for use with NAMD
+##
 proc ::liquify::write_xsc {} {
 	variable options
+	# TODO move to validate input
 	if ![file isdirectory $options(savedir)] {
-		vmdcon -err "$options(savedir) is not a valid directory!"
+		vmdcon -err "$options(savedir) is not a valid directory! \
+		Halting."
 		return 0
 	}
 	set fname "$options(savedir)/$options(savefile).xsc"
 	if [catch {open $fname w} xsc_file] {
-		vmdcon -err "Could not write to $fname"
+		vmdcon -err "Could not write XSC file to $fname! Halting."
 		return 0
 	}
 	puts $xsc_file {#NAMD extended system configuration\n}
@@ -567,10 +576,15 @@ proc ::liquify::write_xsc {} {
 	return 1
 }
 
-#
-# Calculate the density of the active molecule
-#
+##
+## Returns the density of the active molecule within the periodic cell.
+## Density: g/mL
+##
 proc ::liquify::calc_density {} {
+	variable A3_to_mL
+
+	# TODO check for PBC values > 0 before calculating
+	# otherwise inf is returned
 	set resids [lsort -integer -unique [[atomselect top all] get resid]]
 	set atoms [atomselect top "resid [lindex $resids 0]"]
 	# molar mass one molecule (residue)
@@ -582,14 +596,13 @@ proc ::liquify::calc_density {} {
 	set x [lindex $params 0]
 	set y [lindex $params 1]
 	set z [lindex $params 2]
-	set A3_to_mL 1.0e-24 ;# cubic angstroms to mL conversion
 	set vol [expr $x * $y * $z * $A3_to_mL]
 	return [expr $tot_mass / $vol] ;# g/mL
 }
 
-#
-# Return {x y z} list of random points within periodic box
-# 
+##
+## Returns random point (x, y, z) within periodic cell as list.
+## 
 proc ::liquify::random_xyz {} {
 	variable options
 	set dr {}
@@ -600,10 +613,9 @@ proc ::liquify::random_xyz {} {
 	return $dr
 }
 
-#
-# Return a random angle
-#
+##
+## Returns random angle in degrees.
+##
 proc ::liquify::random_angle {} {
 	return [expr (360.0 * rand())]
 }
-
