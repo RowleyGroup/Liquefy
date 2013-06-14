@@ -572,9 +572,9 @@ proc ::liquify::write_xsc {} {
 		vmdcon -err "Could not write XSC file to $fname! Halting."
 		return 0
 	}
-	puts $xsc_file {#NAMD extended system configuration\n}
-	puts $xsc_file {#$LABELS step a_x a_y a_z b_x b_y b_z c_x c_y c_z o_x o_y o_z\n}
-	puts $xsc_file "100 $options(x) 0 0 0 $options(y) 0 0 0 $options(z) 0 0 0\n"
+	puts $xsc_file {#NAMD extended system configuration}
+	puts $xsc_file {#$LABELS step a_x a_y a_z b_x b_y b_z c_x c_y c_z o_x o_y o_z}
+	puts $xsc_file "100 $options(x) 0 0 0 $options(y) 0 0 0 $options(z) 0 0 0"
 	close $xsc_file
 	return 1
 }
