@@ -315,20 +315,20 @@ proc ::liquify::validate_input {} {
 		}
 	}
 
-	if [expr $options(density) <= 0] {
+	if {$options(density) <= 0} {
 		vmdcon -err "Density estimate has to be greater than 0!"
 		vmdcon -info "Halting box fill!"
 		return 0
 	}
 
-	if [expr $options(adj_radii) <= 0] {
+	if {$options(adj_radii) <= 0} {
 		vmdcon -err "Scaling factor for van der Waals radii has to be \
 			greater than 0!"
 		vmdcon -info "Halting box fill!"
 		return 0
 	}
 	
-	if [expr $options(niter) <= 0] {
+	if {$options(niter) <= 0} {
 		vmdcon -err "Failed iteration cutoff has to be greater than 0!"
 		vmdcon -info "Halting box fill!"
 		return 0
@@ -358,14 +358,14 @@ proc ::liquify::populate {} {
 	set atoms [atomselect top all]
 	set base_coords [$atoms get {resname name x y z}] ;# Relative atom coords
 	set diam [vecdist {*}[measure minmax $atoms]] ;# Estimate molecular sphere diameter
-	set radius [expr $diam / 2.0]
+	set radius [expr {$diam / 2.0}]
 	set resnames [lsort -unique [$atoms get resname]]
 	
 	# Estimate number of molecules needed based on density
 	set mol_mass [measure sumweights $atoms weight mass] ;# molar mass
-	set mol_mass [expr $mol_mass / 6.022e23] ;# mass one molecule
-	set vol [expr $options(x) * $options(y) * $options(z) * $A3_to_mL]
-	set num_mols [expr round($options(density) * $vol / $mol_mass)]
+	set mol_mass [expr {$mol_mass / 6.022e23}] ;# mass one molecule
+	set vol [expr {$options(x) * $options(y) * $options(z) * $A3_to_mL}]
+	set num_mols [expr {round($options(density) * $vol / $mol_mass)}]
 
 	mol delete [molinfo top] ;# Remove parent molecule
 
@@ -443,8 +443,8 @@ proc ::liquify::scatter_molecules {diam} {
 
 	# Box boundaries with origin at centre
 	foreach n {x y z} {
-		set max$n [expr $options($n) / 2.0]
-		set min$n [expr -[subst \$max$n]]
+		set max$n [expr {$options($n) / 2.0}]
+		set min$n [expr {-[subst \$max$n]}]
 	}
 
 	# Move one molecule at a time while delete_mols is 0.
@@ -491,9 +491,9 @@ proc ::liquify::scatter_molecules {diam} {
 				foreach n {x y z} {
 					set val [subst $$n]
 					if {$val < [subst \$min$n]} {
-						set $n [expr $val + $options($n)]
+						set $n [expr {$val + $options($n)}]
 					} elseif {$val > [subst \$max$n]} {
-						set $n [expr $val - $options($n)]
+						set $n [expr {$val - $options($n)}]
 					}
 				}
 				lappend test_data_wrapped [list $segid $resid $radius $name $x $y $z]
@@ -544,7 +544,7 @@ proc ::liquify::check_overlap {test_data_wrapped placed cog diam} {
 		set cdata [join [$atoms2 get {name radius x y z}]]
 		foreach {segid resid radius name x y z} [join $test_data_wrapped] {
 			foreach {name2 radius2 x2 y2 z2} $cdata {
-				set rcut [expr $options(adj_radii) * ($radius + $radius2)] ;# atomic radii may vary
+				set rcut [expr {$options(adj_radii) * ($radius + $radius2)}] ;# atomic radii may vary
 				set dist [vecdist "$x $y $z" "$x2 $y2 $z2"]
 				if {$dist < $rcut} {
 					# Atomic overlap, reject move
@@ -593,14 +593,14 @@ proc ::liquify::calc_density {} {
 	# molar mass one molecule (residue)
 	set mol_mass [measure sumweights $atoms weight mass]
 	# actual mass one molecule (g)
-	set mol_mass [expr $mol_mass / 6.022e23]
-	set tot_mass [expr $mol_mass * [llength $resids]]
+	set mol_mass [expr {$mol_mass / 6.022e23}]
+	set tot_mass [expr {$mol_mass * [llength $resids]}]
 	set params [join [pbc get -now]]
 	set x [lindex $params 0]
 	set y [lindex $params 1]
 	set z [lindex $params 2]
-	set vol [expr $x * $y * $z * $A3_to_mL]
-	return [expr $tot_mass / $vol] ;# g/mL
+	set vol [expr {$x * $y * $z * $A3_to_mL}]
+	return [expr {$tot_mass / $vol}] ;# g/mL
 }
 
 ##
@@ -610,7 +610,7 @@ proc ::liquify::random_xyz {} {
 	variable options
 	set dr {}
 	foreach n {x y z} {
-		set val [expr ($options($n) * rand()) - ($options($n) / 2.0)]
+		set val [expr {($options($n) * rand()) - ($options($n) / 2.0)}]
 		lappend dr $val
 	}
 	return $dr
@@ -620,5 +620,5 @@ proc ::liquify::random_xyz {} {
 ## Returns random angle in degrees.
 ##
 proc ::liquify::random_angle {} {
-	return [expr (360.0 * rand())]
+	return [expr {360.0 * rand()}]
 }
