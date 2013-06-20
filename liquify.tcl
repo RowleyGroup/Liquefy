@@ -19,7 +19,7 @@ package require pbctools
 
 ## Create namespace to prevent plugin conflicts
 namespace eval Liquify {
-	#namespace export liquify
+	namespace export liquify_cli liquify_gui
 	
 	# window handle
 	variable w
@@ -41,27 +41,19 @@ namespace eval Liquify {
 }
 
 ##
-## VMD menu calls this function to pop up GUI
+## CLI build call
+## Return values: 0 -> error
+##				  1 -> success
+##				 -1 -> help menu exit
 ##
-proc liquify_tk {} {
-	Liquify::build_gui
-	return $Liquify::w
-}
-
-##
-## CLI call
-## Error: returns 0
-## Success: returns 1
-## Help: returns -1
-##
-proc Liquify::build_cli { args } {
+proc Liquify::liquify_cli { args } {
 	variable options
 	Liquify::set_defaults
 	set usage "
 	
-Usage:  Liquify::build_cli args1 ?args2?
+Usage:  Liquify::liquify_cli args1 ?args2?
 
-Help:	Liquify::build_cli -help
+Help:	Liquify::liquify_cli -help
 
 Required args1:
   -pdb <molecule PDB file>
@@ -104,9 +96,10 @@ Optional args2:
 
 ##
 ## Build a window to allow user input of parameters
-## $w will be passed by global liquify_tk to VMD
+## Used as Tk callback proc in VMD extension menu
+## Returns window handle
 ##
-proc Liquify::build_gui {} {
+proc Liquify::liquify_gui {} {
 	variable w
 	variable options
 	set gui 1
@@ -256,6 +249,8 @@ proc Liquify::build_gui {} {
 	grid $l2 -column 1 -row 1 -sticky w
 
 	Liquify::set_defaults
+
+	return $w
 }
 
 ##
@@ -280,6 +275,7 @@ proc Liquify::set_defaults {} {
 	set Liquify::tot_resid 0
 	set Liquify::density {0.0 g/mL}
 	}
+	return 1
 }
 
 ##
@@ -293,6 +289,7 @@ proc Liquify::clear_mols {} {
 		mol delete $id
 	}
 	vmdcon -info "...done"
+	return 1
 }
 
 ##
@@ -305,11 +302,14 @@ proc Liquify::save_reload {name} {
 
 	mol delete [molinfo top]
 	mol load psf $name.psf pdb $name.pdb
+	return 1
 }
 
 ##
-## Returns 1 (true) for valid user input.
-## Loads parent molecule.
+## Validate user input
+## Return values: 0 -> error
+##				  1 -> success
+## Also loads parent molecule.
 ##
 proc Liquify::validate_input { gui } {
 	variable w
@@ -398,8 +398,9 @@ proc Liquify::validate_input { gui } {
 }
 
 ##
-## Create a liquid from parent molecule.
-## Returns 1 (true) for success
+## Build the liquid from parent molecule.
+## Return values: 0 -> error
+##				  1 -> success
 ##
 proc Liquify::populate { gui } {
 	variable PI
@@ -485,6 +486,7 @@ proc Liquify::generate_blanks {n resnames} {
 			}
 		}
 	}
+	return 1
 }
 
 ##
@@ -582,8 +584,8 @@ proc Liquify::scatter_molecules {diam} {
 
 ##
 ## Check the atomic overlap between two molecules.
-## args -> molecule being scattered
-## <varname>2 -> already placed molecule
+##   args refer to molecule being scattered
+##   <varname>2 refer to already placed molecule
 ##
 proc Liquify::check_overlap {test_data_wrapped placed cog diam} {
 	variable options
@@ -618,6 +620,8 @@ proc Liquify::check_overlap {test_data_wrapped placed cog diam} {
 
 ##
 ## Save XSC file for use with NAMD
+## Return values: 0 -> error
+## 				  1 -> success
 ##
 proc Liquify::write_xsc {} {
 	variable options
