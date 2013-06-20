@@ -10,7 +10,7 @@
 ## Authors: Leif Hickey and Christopher N. Rowley                     ##
 ## Contact: leif.hickey@mun.ca, cnrowley@mun.ca                       ##
 ## http://www.mun.ca/compchem                                         ##
-## Date: 06/13/13                                                     ##
+## Date: 06/19/13                                                     ##
 ## ################################################################## ##
 
 package provide liquify 1.0
@@ -45,15 +45,58 @@ namespace eval ::liquify {
 ##
 proc ::liquify_tk {} {
 	::liquify::build_gui
-	return $liquify::w
+	return $::liquify::w
 }
 
 ##
 ## CLI call
+## Error: returns 0
+## Success: returns 1
+## Help: returns -1
 ##
-proc ::liquify::liquify { args } {
-	#if ![llength $args]
-	puts pass
+proc ::liquify::build_cli { args } {
+	variable options
+	::liquify::set_defaults
+	set usage "
+	
+Usage:    ::liquify::build_cli args1 ?args2?
+
+Required args1:
+  -pdb <molecule PDB file>
+  -psf <molecule PSF file>
+  -top <molecule RTF file>
+  -savefile <save file prefix>
+
+Optional args2:
+  -niter <int> (default: 150)
+  -savedir <save directory> (default: $::env(PWD))
+  -cube <0,1> (default: 1 -> use cubic cell)
+  -reject <0,1> (default:1 -> use early rejection)
+  -adj_radii <float> (default: 1.0 -> van der Waals radius scaling factor)
+  -density <float> (default: 1.0 -> estimated liquid density in g/mL)
+  -x <int> (default: 30 -> length box side x)
+  -y <int> (default: 30 -> length box side y)
+  -z <int> (default: 30 -> length box side z)
+
+	"
+	if {$args == -help} {
+		vmdcon -info $usage
+		return -1
+	}
+	array set options $args
+	set gui 0
+	set ::liquify::tot_resid 0
+	set ::liquify::density {0.0 g/mL}
+	
+	vmdcon -info "Liquify: Building liquid using options"
+	parray options
+	# Input validation is called from populate
+	if {![::liquify::populate $gui]} {
+		#vmdcon -err "Could not validate arguments! Halting."
+		vmdcon -info $usage
+		return 0
+	}
+	return 1
 }
 
 ##
@@ -63,6 +106,7 @@ proc ::liquify::liquify { args } {
 proc ::liquify::build_gui {} {
 	variable w
 	variable options
+	set gui 1
 
 	if {[winfo exists .liquify]} {
 		 wm deiconify $w ;# Bring window to front
@@ -71,7 +115,6 @@ proc ::liquify::build_gui {} {
 
 	set w [toplevel .liquify]
 	wm title $w "Build Molecular Liquid"
-	::liquify::set_defaults
 
 	set twidth 50 ;# text box width
 	set nwidth 5 ;# number box width
@@ -87,8 +130,8 @@ proc ::liquify::build_gui {} {
 	foreach n {pdb psf top} {
 		set bigname [string toupper $n]
 		set l [label $w.f1.$n-l1 -text "$bigname File"]
-		set e [entry $w.f1.$n-e1 -width $twidth -textvariable ::liquify::options($n)] 
-		set cmd "set ::liquify::options($n) \[tk_getOpenFile\]"
+		set e [entry $w.f1.$n-e1 -width $twidth -textvariable ::liquify::options(-$n)] 
+		set cmd "set ::liquify::options(-$n) \[tk_getOpenFile\]"
 		set b [button $w.f1.$n-b1 -text "Browse" -command $cmd]
 		grid $l -column 0 -row $row -sticky e
 		grid $e -column 1 -row $row -sticky ew
@@ -102,7 +145,7 @@ proc ::liquify::build_gui {} {
 	
 	set row 0
 	foreach n {x y z} {
-		set e [entry $w.f2.$n-e1 -textvariable ::liquify::options($n) -width $nwidth \
+		set e [entry $w.f2.$n-e1 -textvariable ::liquify::options(-$n) -width $nwidth \
 		-validate key -vcmd {string is int %P}]
 		#	-validate key -vcmd {string is int %P}]
 		set l [label $w.f2.$n-l1 -text "$n"]
@@ -112,17 +155,17 @@ proc ::liquify::build_gui {} {
 	}
 
 	set cmd {
-		if {$::liquify::options(cube)} {
-			$::liquify::w.f2.y-e1 config -state readonly
-			$::liquify::w.f2.z-e1 config -state readonly
+		if {$::liquify::options(-cube)} {
+			$::liquify::w.f2.y-e1 configure -state readonly
+			$::liquify::w.f2.z-e1 configure -state readonly
 		} else {
-			$::liquify::w.f2.y-e1 config -state normal
-			$::liquify::w.f2.z-e1 config -state normal
+			$::liquify::w.f2.y-e1 configure -state normal
+			$::liquify::w.f2.z-e1 configure -state normal
 		}
 	}
 			
 	set l [label $w.f2.l4 -text "Cubic Periodic Cell"]
-	set c [checkbutton $w.f2.c1 -variable ::liquify::options(cube) \
+	set c [checkbutton $w.f2.c1 -variable ::liquify::options(-cube) \
 		-command $cmd]
 	grid $l -column 2 -row 0 -sticky e
 	grid $c -column 3 -row 0 -sticky w
@@ -132,25 +175,25 @@ proc ::liquify::build_gui {} {
 		-sticky news
 
 	set l [label $w.f4.l1 -text "Failed iteration cutoff"]
-	set s [spinbox $w.f4.s1 -textvariable ::liquify::options(niter) \
+	set s [spinbox $w.f4.s1 -textvariable ::liquify::options(-niter) \
 		-from 100 -to 1000 -increment 50 -width $nwidth -validate key \
 		-vcmd {string is int %P}]
 	grid $l -column 0 -row 0 -sticky e
 	grid $s -column 1 -row 0 -sticky w
 
 	set l [label $w.f4.l2 -text "Use early rejection"]
-	set c [checkbutton $w.f4.c1 -variable ::liquify::options(reject)]
+	set c [checkbutton $w.f4.c1 -variable ::liquify::options(-reject)]
 	grid $l -column 0 -row 1 -sticky e
 	grid $c -column 1 -row 1 -sticky w
 
 	set l [label $w.f4.l3 -text "Density estimate (g/mL)"]
-	set e [entry $w.f4.e1 -textvariable ::liquify::options(density) \
+	set e [entry $w.f4.e1 -textvariable ::liquify::options(-density) \
 	-width $nwidth -validate key -vcmd {string is double %P}]
 	grid $l -column 0 -row 2 -sticky e
 	grid $e -column 1 -row 2 -sticky w
 
 	set l [label $w.f4.l4 -text "Scaling factor for van der Waals radii"]
-	set e [entry $w.f4.e2 -textvariable ::liquify::options(adj_radii) \
+	set e [entry $w.f4.e2 -textvariable ::liquify::options(-adj_radii) \
 	-width $nwidth -validate key -vcmd {string is double %P}]
 	grid $l -column 0 -row 3 -sticky e
 	grid $e -column 1 -row 3 -sticky w
@@ -160,15 +203,15 @@ proc ::liquify::build_gui {} {
 		-columnspan 2 -rowspan 1 -sticky news
 	
 	set l [label $w.f3.l1 -text "Location"] 
-	set e [entry $w.f3.e1 -textvariable ::liquify::options(savedir) -width $twidth] 
-	set cmd "set ::liquify::options(savedir) \[tk_chooseDirectory\]"
+	set e [entry $w.f3.e1 -textvariable ::liquify::options(-savedir) -width $twidth] 
+	set cmd "set ::liquify::options(-savedir) \[tk_chooseDirectory\]"
 	set b [button $w.f3.b1 -text "Browse" -command $cmd]
 	grid $l -column 0 -row 0 -sticky e
 	grid $e -column 1 -row 0 -sticky ew
 	grid $b -column 2 -row 0 -sticky w
 
 	set l [label $w.f3.l2 -text "Name"]
-	set e [entry $w.f3.e2 -textvariable ::liquify::options(savefile) -width $twidth]
+	set e [entry $w.f3.e2 -textvariable ::liquify::options(-savefile) -width $twidth]
 	set cmd "::liquify::save_reload"
 	set b [button $w.f3.b2 -text "Save PBD/PSF" -command $cmd]
 	grid $l -column 0 -row 1 -sticky e
@@ -179,7 +222,7 @@ proc ::liquify::build_gui {} {
 	grid [labelframe $w.f5 -text "Populate Box"] \
 		-column 0 -row 3 -sticky nsew
 
-	set cmd "::liquify::populate"
+	set cmd "::liquify::populate $gui"
 	set b [button $w.f5.b1 -text "Fill!" -command $cmd]
 	grid $b -column 1 -row 0
 
@@ -208,6 +251,8 @@ proc ::liquify::build_gui {} {
 	set l2 [label $w.f6.l4 -textvariable ::liquify::tot_resid]
 	grid $l1 -column 0 -row 1 -sticky e
 	grid $l2 -column 1 -row 1 -sticky w
+
+	::liquify::set_defaults
 }
 
 ##
@@ -215,18 +260,20 @@ proc ::liquify::build_gui {} {
 ##
 proc ::liquify::set_defaults {} {
 	variable options
-	set options(niter) 150
-	set options(pdb) ""
-	set options(psf) ""
-	set options(top) ""
-	set options(savedir) $::env(PWD)
-	set options(savefile) myliquid
-	set options(cube) 0
-	set options(reject) 1
-	set options(adj_radii) 1.0
-	set options(density) 1.0
+	set options(-niter) 150
+	set options(-pdb) ""
+	set options(-psf) ""
+	set options(-top) ""
+	set options(-savedir) $::env(PWD)
+	set options(-savefile) ""
+	set options(-cube) 0
+	$::liquify::w.f2.y-e1 configure -state normal
+	$::liquify::w.f2.z-e1 configure -state normal
+	set options(-reject) 1
+	set options(-adj_radii) 1.0
+	set options(-density) 1.0
 	foreach n {x y z} {
-		set options($n) 30
+		set options(-$n) 30
 	set ::liquify::tot_resid 0
 	set ::liquify::density {0.0 g/mL}
 	}
@@ -261,74 +308,84 @@ proc ::liquify::save_reload {name} {
 ## Returns 1 (true) for valid user input.
 ## Loads parent molecule.
 ##
-proc ::liquify::validate_input {} {
+proc ::liquify::validate_input { gui } {
 	variable w
 	variable options
 	vmdcon -info "Input validation..."
 
 
-	if {[llength $options(savefile)] == 0} {
+	if {[llength $options(-savefile)] == 0} {
 		vmdcon -err "No save filename given! Halting."
 		return 0
 	}
 
 	# User confirm to overwrite existing files
-	set basename "$options(savedir)/$options(savefile)"
+	set basename "$options(-savedir)/$options(-savefile)"
 	if {[file exists $basename.pdb] || \
 		[file exists $basename.psf] || \
 		[file exists $basename.xsc]} {
-			set val [tk_messageBox -icon warning -type okcancel -title Message -parent $w \
-				-message "Some project files $options(savefile).{pdb psf xsc} exist! Overwrite?"]
-      		if {$val == "cancel"} { return 0 }
+			set msg "Some project files $options(-savefile).{pdf psf xsc} exist! Overwrite?"
+			if {$gui} {
+				set val [tk_messageBox -icon warning -type okcancel -title Message -parent $w \
+					-message $msg]
+      			if {$val == "cancel"} { return 0 }
+      		} else {
+				puts "$msg \[y/n\]"
+				gets stdin val
+				if {$val == n} {
+					vmdcon -info "Not overwriting files! Halting."
+					return 0
+				}
+			}
    	}
 
 	vmdcon -info "Reset display field..."
 	::liquify::clear_mols
 	vmdcon -info "Populating..."
 
-	vmdcon -info "Loading PBD file for parent molecule \{$options(pdb)\}..."
-	if [catch {mol new $options(pdb) type pdb} err] {
+	vmdcon -info "Loading PBD file for parent molecule \{$options(-pdb)\}..."
+	if {[catch {mol new $options(-pdb) type pdb} err]} {
 		vmdcon -err "Could not load PDB file! Halting box fill."
 		return 0
 	}
 	
 	vmdcon -info "Loading PSF data into parent molecule..."
-	if [catch {mol addfile $options(psf) type psf} err] {
+	if {[catch {mol addfile $options(-psf) type psf} err]} {
 		vmdcon -info "Could not load PSF data! Halting box fill."
 		return 0
 	}
 
-	vmdcon -info "Loading topology from $options(top)..."
-	topology $options(top)
+	vmdcon -info "Loading topology from $options(-top)..."
+	topology $options(-top)
 
 	# Adjust y,z for cubic periodic cell
-	if $options(cube) {
+	if {$options(-cube)} {
 		foreach i {y z} {
-			set options($i) $options(x)
+			set options(-$i) $options(-x)
 		}
 	}
 	foreach i {x y z} {
-		if {$options($i) <= 0} {
+		if {$options(-$i) <= 0} {
 			vmdcon -err "Box dimensions must be greater than 0!"
 			vmdcon -info "Halting box fill!"
 			return 0
 		}
 	}
 
-	if {$options(density) <= 0} {
+	if {$options(-density) <= 0} {
 		vmdcon -err "Density estimate has to be greater than 0!"
 		vmdcon -info "Halting box fill!"
 		return 0
 	}
 
-	if {$options(adj_radii) <= 0} {
+	if {$options(-adj_radii) <= 0} {
 		vmdcon -err "Scaling factor for van der Waals radii has to be \
 			greater than 0!"
 		vmdcon -info "Halting box fill!"
 		return 0
 	}
 	
-	if {$options(niter) <= 0} {
+	if {$options(-niter) <= 0} {
 		vmdcon -err "Failed iteration cutoff has to be greater than 0!"
 		vmdcon -info "Halting box fill!"
 		return 0
@@ -341,7 +398,7 @@ proc ::liquify::validate_input {} {
 ## Create a liquid from parent molecule.
 ## Returns 1 (true) for success
 ##
-proc ::liquify::populate {} {
+proc ::liquify::populate { gui } {
 	variable PI
 	variable A3_to_mL
 	variable options
@@ -349,7 +406,7 @@ proc ::liquify::populate {} {
 	variable density
 	variable tot_resid
 
-	if ![::liquify::validate_input] {
+	if {![::liquify::validate_input $gui]} {
 		vmdcon -err "Could not validate input! Halting."
 		return 0
 	}
@@ -364,8 +421,8 @@ proc ::liquify::populate {} {
 	# Estimate number of molecules needed based on density
 	set mol_mass [measure sumweights $atoms weight mass] ;# molar mass
 	set mol_mass [expr {$mol_mass / 6.022e23}] ;# mass one molecule
-	set vol [expr {$options(x) * $options(y) * $options(z) * $A3_to_mL}]
-	set num_mols [expr {round($options(density) * $vol / $mol_mass)}]
+	set vol [expr {$options(-x) * $options(-y) * $options(-z) * $A3_to_mL}]
+	set num_mols [expr {round($options(-density) * $vol / $mol_mass)}]
 
 	mol delete [molinfo top] ;# Remove parent molecule
 
@@ -380,15 +437,15 @@ proc ::liquify::populate {} {
 	::liquify::generate_blanks $num_mols $resnames
 
 	# It seems necessary to write to file and reload
-	::liquify::save_reload "$options(savedir)/$options(savefile)"
+	::liquify::save_reload "$options(-savedir)/$options(-savefile)"
 
 	# Scatter molecules randomly around in the box
 	vmdcon -info "Attempting to scatter $num_mols molecules..."
 	set tot_resid "[::liquify::scatter_molecules $diam] (of $num_mols)"
 
-	::liquify::save_reload "$options(savedir)/$options(savefile)"
+	::liquify::save_reload "$options(-savedir)/$options(-savefile)"
 
-	pbc set "$options(x) $options(y) $options(z)" -all
+	pbc set "$options(-x) $options(-y) $options(-z)" -all
 	pbc box -center origin ;# draw periodic box
 
 	# Represent molecules in Licorice style
@@ -398,7 +455,7 @@ proc ::liquify::populate {} {
 
 	# Create XSC file for use with NAMD
 	vmdcon -info "Writing xsc file..."
-	if ![::liquify::write_xsc] {
+	if {![::liquify::write_xsc]} {
 		vmdcon -err "Write to xsc file failed. Halting"
 		return 0
 	}
@@ -443,7 +500,7 @@ proc ::liquify::scatter_molecules {diam} {
 
 	# Box boundaries with origin at centre
 	foreach n {x y z} {
-		set max$n [expr {$options($n) / 2.0}]
+		set max$n [expr {$options(-$n) / 2.0}]
 		set min$n [expr {-[subst \$max$n]}]
 	}
 
@@ -469,7 +526,7 @@ proc ::liquify::scatter_molecules {diam} {
 		while {$overlap} {
 			incr failures
 			
-			if {$failures > $options(niter)} {
+			if {$failures > $options(-niter)} {
 				vmdcon -info "Reached max iterations for placing molecules at residue: $resid"
 				set delete_mols 1
 				delatom $segname $resid
@@ -491,9 +548,9 @@ proc ::liquify::scatter_molecules {diam} {
 				foreach n {x y z} {
 					set val [subst $$n]
 					if {$val < [subst \$min$n]} {
-						set $n [expr {$val + $options($n)}]
+						set $n [expr {$val + $options(-$n)}]
 					} elseif {$val > [subst \$max$n]} {
-						set $n [expr {$val - $options($n)}]
+						set $n [expr {$val - $options(-$n)}]
 					}
 				}
 				lappend test_data_wrapped [list $segid $resid $radius $name $x $y $z]
@@ -536,7 +593,7 @@ proc ::liquify::check_overlap {test_data_wrapped placed cog diam} {
 		
 		# Use early rejection to prevent uncessesary checks
 		# TODO remove option from GUI
-		if {$options(reject) && $dr >= $diam} {
+		if {$options(-reject) && $dr >= $diam} {
 			continue
 		}
 
@@ -544,7 +601,7 @@ proc ::liquify::check_overlap {test_data_wrapped placed cog diam} {
 		set cdata [join [$atoms2 get {name radius x y z}]]
 		foreach {segid resid radius name x y z} [join $test_data_wrapped] {
 			foreach {name2 radius2 x2 y2 z2} $cdata {
-				set rcut [expr {$options(adj_radii) * ($radius + $radius2)}] ;# atomic radii may vary
+				set rcut [expr {$options(-adj_radii) * ($radius + $radius2)}] ;# atomic radii may vary
 				set dist [vecdist "$x $y $z" "$x2 $y2 $z2"]
 				if {$dist < $rcut} {
 					# Atomic overlap, reject move
@@ -562,19 +619,19 @@ proc ::liquify::check_overlap {test_data_wrapped placed cog diam} {
 proc ::liquify::write_xsc {} {
 	variable options
 	# TODO move to validate input
-	if ![file isdirectory $options(savedir)] {
-		vmdcon -err "$options(savedir) is not a valid directory! \
+	if {![file isdirectory $options(-savedir)]} {
+		vmdcon -err "$options(-savedir) is not a valid directory! \
 		Halting."
 		return 0
 	}
-	set fname "$options(savedir)/$options(savefile).xsc"
-	if [catch {open $fname w} xsc_file] {
+	set fname "$options(-savedir)/$options(-savefile).xsc"
+	if {[catch {open $fname w} xsc_file]} {
 		vmdcon -err "Could not write XSC file to $fname! Halting."
 		return 0
 	}
 	puts $xsc_file {#NAMD extended system configuration}
 	puts $xsc_file {#$LABELS step a_x a_y a_z b_x b_y b_z c_x c_y c_z o_x o_y o_z}
-	puts $xsc_file "100 $options(x) 0 0 0 $options(y) 0 0 0 $options(z) 0 0 0"
+	puts $xsc_file "100 $options(-x) 0 0 0 $options(-y) 0 0 0 $options(-z) 0 0 0"
 	close $xsc_file
 	return 1
 }
@@ -610,7 +667,7 @@ proc ::liquify::random_xyz {} {
 	variable options
 	set dr {}
 	foreach n {x y z} {
-		set val [expr {($options($n) * rand()) - ($options($n) / 2.0)}]
+		set val [expr {($options(-$n) * rand()) - ($options(-$n) / 2.0)}]
 		lappend dr $val
 	}
 	return $dr
