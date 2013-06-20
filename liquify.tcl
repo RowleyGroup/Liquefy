@@ -10,7 +10,7 @@
 ## Authors: Leif Hickey and Christopher N. Rowley                     ##
 ## Contact: leif.hickey@mun.ca, cnrowley@mun.ca                       ##
 ## http://www.mun.ca/compchem                                         ##
-## Date: 06/19/13                                                     ##
+## Date: 06/20/13                                                     ##
 ## ################################################################## ##
 
 package provide liquify 1.0
@@ -65,7 +65,6 @@ Optional args2:
   -niter <int> (default: 150)
   -savedir <save directory> (default: $::env(PWD))
   -cube <0,1> (default: 1 -> use cubic cell)
-  -reject <0,1> (default:1 -> use early rejection)
   -adj_radii <float> (default: 1.0 -> van der Waals radius scaling factor)
   -density <float> (default: 1.0 -> estimated liquid density in g/mL)
   -x <int> (default: 30 -> length box side x)
@@ -177,22 +176,17 @@ proc Liquify::liquify_gui {} {
 	grid $l -column 0 -row 0 -sticky e
 	grid $s -column 1 -row 0 -sticky w
 
-	set l [label $w.f4.l2 -text "Use early rejection"]
-	set c [checkbutton $w.f4.c1 -variable Liquify::options(-reject)]
-	grid $l -column 0 -row 1 -sticky e
-	grid $c -column 1 -row 1 -sticky w
-
 	set l [label $w.f4.l3 -text "Density estimate (g/mL)"]
 	set e [entry $w.f4.e1 -textvariable Liquify::options(-density) \
 	-width $nwidth -validate key -vcmd {string is double %P}]
-	grid $l -column 0 -row 2 -sticky e
-	grid $e -column 1 -row 2 -sticky w
+	grid $l -column 0 -row 1 -sticky e
+	grid $e -column 1 -row 1 -sticky w
 
 	set l [label $w.f4.l4 -text "Scaling factor for van der Waals radii"]
 	set e [entry $w.f4.e2 -textvariable Liquify::options(-adj_radii) \
 	-width $nwidth -validate key -vcmd {string is double %P}]
-	grid $l -column 0 -row 3 -sticky e
-	grid $e -column 1 -row 3 -sticky w
+	grid $l -column 0 -row 2 -sticky e
+	grid $e -column 1 -row 2 -sticky w
 
 	# Frame containing new save location
 	grid [labelframe $w.f3 -text "Save Location for New Data"] \
@@ -267,7 +261,6 @@ proc Liquify::set_defaults {} {
 	set options(-cube) 0
 	$Liquify::w.f2.y-e1 configure -state normal
 	$Liquify::w.f2.z-e1 configure -state normal
-	set options(-reject) 1
 	set options(-adj_radii) 1.0
 	set options(-density) 1.0
 	foreach n {x y z} {
@@ -587,6 +580,9 @@ proc Liquify::scatter_molecules {diam} {
 ##   args refer to molecule being scattered
 ##   <varname>2 refer to already placed molecule
 ##
+## Return values: 0 -> no overlap
+##				  1 -> overlap
+##
 proc Liquify::check_overlap {test_data_wrapped placed cog diam} {
 	variable options
 
@@ -597,8 +593,7 @@ proc Liquify::check_overlap {test_data_wrapped placed cog diam} {
 		set dr [vecdist $cog $cog2]
 		
 		# Use early rejection to prevent uncessesary checks
-		# TODO remove option from GUI
-		if {$options(-reject) && $dr >= $diam} {
+		if {$dr >= $diam} {
 			continue
 		}
 
@@ -609,13 +604,12 @@ proc Liquify::check_overlap {test_data_wrapped placed cog diam} {
 				set rcut [expr {$options(-adj_radii) * ($radius + $radius2)}] ;# atomic radii may vary
 				set dist [vecdist "$x $y $z" "$x2 $y2 $z2"]
 				if {$dist < $rcut} {
-					# Atomic overlap, reject move
 					return 1
 				}
 			}
 		}
 	}
-	return 0 ;# No atomic overlap, accept move
+	return 0
 }
 
 ##
