@@ -259,8 +259,10 @@ proc Liquify::set_defaults {} {
 	set options(-savedir) $::env(PWD)
 	set options(-savefile) ""
 	set options(-cube) 0
-	$Liquify::w.f2.y-e1 configure -state normal
-	$Liquify::w.f2.z-e1 configure -state normal
+	if {[winfo exists .liquify]} {
+		$Liquify::w.f2.y-e1 configure -state normal
+		$Liquify::w.f2.z-e1 configure -state normal
+	}
 	set options(-adj_radii) 1.0
 	set options(-density) 1.0
 	foreach n {x y z} {
