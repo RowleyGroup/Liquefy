@@ -20,13 +20,13 @@ To install:
         set auto_path [linsert 0 [file join $env(HOME) vmdplugins]]
 
         # Add new plugins
-        vmd_install_extension liquify liquify_gui {Modeling/Build Molecular Liquid}`
+        vmd_install_extension liquify liquify_gui {Modeling/Build Molecular Liquid}
 
 __Windows__
 
 To install:
 
-- Follow the steps above, substituting pathnames as needed.
+- Follow the steps above, substituting path names as needed.
 
     e.g. change:
     
@@ -70,7 +70,7 @@ The GUI provides input for the following parameters:
 
 1. PDB, PSF, and TOP Files
 
-    > Input files for the single molecule you wish to generate a liquid structure for.
+    Input files for the single molecule you wish to generate a liquid structure for.
  
 
     - PDB: Protein Data Bank 
@@ -81,7 +81,7 @@ The GUI provides input for the following parameters:
 
 2. Box Dimensions
 
-    > Input the desired length along each axis of the periodic cell. Selecting the check box "Cubic Periodic Cell" will discard _y_ and _z_ input and use _x_ for all dimensions.
+    Input the desired length along each axis of the periodic cell. Selecting the check box "Cubic Periodic Cell" will discard _y_ and _z_ input and use _x_ for all dimensions.
 
 3. Runtime Options
 
