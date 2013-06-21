@@ -17,7 +17,7 @@ To install:
         menu main on
 
         # Add new plugin directory to search path
-        set auto_path [linsert 0 [file join $env(HOME) vmdplugins]]
+        set auto_path [linsert $auto_path 0 [file join $env(HOME) vmdplugins]]
 
         # Add new plugins
         vmd_install_extension liquify liquify_gui {Modeling/Build Molecular Liquid}
@@ -34,11 +34,11 @@ To install:
     - the directory `$HOME` _to_ `%USERPROFILE%` (_e.g._ C:\\Users\\myuser\\vmd.rc)
     - the line 
 
-        `set auto_path [linsert 0 [file join $env(HOME) vmdplugins]]` 
+        `set auto_path [linsert $auto_path 0 [file join $env(HOME) vmdplugins]]` 
 
         _to_
 
-        `set auto_path [linsert 0 {C:\\vmdplugins}`
+        `set auto_path [linsert $auto_path 0 {C:\\vmdplugins}`
 
         (substitute C:\\vmdplugins with your plugin directory location)
 
