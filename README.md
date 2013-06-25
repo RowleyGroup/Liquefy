@@ -13,16 +13,16 @@ To install:
 - Copy the folder `liquify/` to plugin folder ( _e.g._ `~/vmdplugins/liquify/`)
 - Add the following lines to `~/.vmdrc` (or create the file)
 
-    ```tcl
-    # Turn on main menu
-    menu main on
+```tcl
+# Turn on main menu
+menu main on
 
-    # Add new plugin directory to search path
-    set auto_path [linsert $auto_path 0 [file join $env(HOME) vmdplugins]]
+# Add new plugin directory to search path
+set auto_path [linsert $auto_path 0 [file join $env(HOME) vmdplugins]]
 
-    # Add new plugins
-    vmd_install_extension liquify Liquify::liquify_gui {Modeling/Build Molecular Liquid}
-    ```
+# Add new plugins
+vmd_install_extension liquify Liquify::liquify_gui {Modeling/Build Molecular Liquid}
+```
 
 __Windows__
 
@@ -36,15 +36,15 @@ To install:
     - the directory `$HOME` _to_ `%USERPROFILE%` (_e.g._ `C:\Users\myuser\vmd.rc`)
     - the line 
 
-        ```tcl
-        set auto_path [linsert $auto_path 0 [file join $env(HOME) vmdplugins]]
-        ```
+```tcl
+set auto_path [linsert $auto_path 0 [file join $env(HOME) vmdplugins]]
+```
 
         _to_
 
-        ```tcl
-        set auto_path [linsert $auto_path 0 {C:\vmdplugins}
-        ```
+```tcl
+set auto_path [linsert $auto_path 0 {C:\vmdplugins}
+```
 
         (substitute `C:\vmdplugins` with your plugin directory location)
 
