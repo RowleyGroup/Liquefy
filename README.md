@@ -20,7 +20,7 @@ To install:
         set auto_path [linsert $auto_path 0 [file join $env(HOME) vmdplugins]]
 
         # Add new plugins
-        vmd_install_extension liquify liquify_gui {Modeling/Build Molecular Liquid}
+        vmd_install_extension liquify Liquify::liquify_gui {Modeling/Build Molecular Liquid}
 
 __Windows__
 

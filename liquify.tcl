@@ -63,7 +63,7 @@ Required args1:
 
 Optional args2:
   -niter <int> (default: 150)
-  -savedir <save directory> (default: $::env(PWD))
+  -savedir <save directory> (default: [pwd]))
   -cube <0,1> (default: 1 -> use cubic cell)
   -adj_radii <float> (default: 1.0 -> van der Waals radius scaling factor)
   -density <float> (default: 1.0 -> estimated liquid density in g/mL)
@@ -256,7 +256,7 @@ proc Liquify::set_defaults {} {
 	set options(-pdb) ""
 	set options(-psf) ""
 	set options(-top) ""
-	set options(-savedir) $::env(PWD)
+	set options(-savedir) [pwd]
 	set options(-savefile) ""
 	set options(-cube) 0
 	if {[winfo exists .liquify]} {
