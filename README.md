@@ -21,7 +21,10 @@ menu main on
 set auto_path [linsert $auto_path 0 [file join $env(HOME) vmdplugins]]
 
 # Add new plugins
-vmd_install_extension liquify Liquify::liquify_gui {Modeling/Build Molecular Liquid}
+vmd_install_extension liquify liquify_gui {Modeling/Build Molecular Liquid}
+
+# Import liquify_gui and liquify_cli into global namespace
+namespace import Liquify::*
 ```
 
 __Windows__

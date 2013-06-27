@@ -1,0 +1,11 @@
+# Add vmdplugins to search path
+set auto_path [linsert $auto_path 0 [file join $env(HOME) vmdplugins]]
+
+# Turn on main menu
+menu main on
+
+# Install liquify plugin
+vmd_install_extension liquify liquify_gui "Modeling/Build Molecular Liquid"
+
+# Import liquify_gui and liquify_cli
+namespace import Liquify::*
