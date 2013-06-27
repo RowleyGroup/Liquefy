@@ -259,9 +259,13 @@ proc Liquify::set_defaults {} {
 	set options(-savedir) [pwd]
 	set options(-savefile) ""
 	set options(-cube) 0
-	if {[winfo exists .liquify]} {
-		$Liquify::w.f2.y-e1 configure -state normal
-		$Liquify::w.f2.z-e1 configure -state normal
+	if {[catch {package present Tk} res]} {
+		puts "No X present"
+	} else {
+		if {[winfo exists .liquify]} {
+			$Liquify::w.f2.y-e1 configure -state normal
+			$Liquify::w.f2.z-e1 configure -state normal
+		}
 	}
 	set options(-adj_radii) 1.0
 	set options(-density) 1.0
@@ -462,6 +466,7 @@ proc Liquify::populate { gui } {
 	vmdcon -info "Calculating randomly packed density..."
 	set density [format "%.4f g/mL" [Liquify::calc_density]]
 	vmdcon "density: $density\n"
+	vmdcon "number molecules added: $tot_resid\n"
 
 	return 1
 }

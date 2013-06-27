@@ -33,27 +33,29 @@ To install:
     e.g. change:
     
     - the file name `.vmdrc` _to_ `vmd.rc`
-    - the directory `$HOME` _to_ `%USERPROFILE%` (_e.g._ `C:\Users\myuser\vmd.rc`)
+    - the directory `$HOME` _to_ `%USERPROFILE%` ( _e.g._ `C:\Users\myuser\vmd.rc`)
     - the line 
 
 ```tcl
 set auto_path [linsert $auto_path 0 [file join $env(HOME) vmdplugins]]
 ```
 
-        _to_
+_to_
 
 ```tcl
-set auto_path [linsert $auto_path 0 {C:\vmdplugins}
+set auto_path [linsert $auto_path 0 {C:\vmdplugins}]
 ```
 
-        (substitute `C:\vmdplugins` with your plugin directory location)
+(substitute `C:\vmdplugins` with your plugin directory location)
 
 After installing, the vmdplugins directory should look like this:
-        
-        vmdplugins/
-        +-- liquify/
-        |       +-- liquify.tcl
-        |       +-- pkgIndex.tcl
+
+```
+vmdplugins/
++-- liquify/
+|       +-- liquify.tcl
+|       +-- pkgIndex.tcl
+```
 
 Using the Plugin
 ------------------
