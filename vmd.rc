@@ -1,5 +1,5 @@
 # Add vmdplugins directory to search path
-set auto_path [linsert $auto_path 0 {C:\vmdplugins}]
+set auto_path [linsert $auto_path 0 [file join $env(USERPROFILE) vmdplugins]]
 
 # Turn on main menu
 menu main on

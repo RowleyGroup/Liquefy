@@ -11,7 +11,8 @@ To install:
 
 - Create a plugin folder for added plugins ( _e.g._ `~/vmdplugins`)
 - Copy the folder `liquify/` to plugin folder ( _e.g._ `~/vmdplugins/liquify/`)
-- Add the following lines to `~/.vmdrc` (or create the file)
+- Add the following lines to `~/.vmdrc` or copy the provided `liquify/vmdrc` file
+  to `~/.vmdrc`
 
 ```tcl
 # Turn on main menu
@@ -31,25 +32,24 @@ __Windows__
 
 To install:
 
-- Follow the steps above, substituting path names as needed.
-
-    e.g. change:
-    
-    - the file name `.vmdrc` _to_ `vmd.rc`
-    - the directory `$HOME` _to_ `%USERPROFILE%` ( _e.g._ `C:\Users\myuser\vmd.rc`)
-    - the line 
+- Create a plugin folder for added plugins ( _e.g._ `C:\Users\My Name\vmdplugins` )
+- Copy the folder `liquify/` to plugin folder ( _e.g._ `vmdplugins\liquify` )
+- Add the following lines to the file `vmd.rc` in your home directory,
+  or copy the provided `vmd.rc` file to your home directory.
 
 ```tcl
-set auto_path [linsert $auto_path 0 [file join $env(HOME) vmdplugins]]
+# Turn on main menu
+menu main on
+
+# Add new plugin directory to search path
+set auto_path [linsert $auto_path 0 [file join $env(USERPROFILE) vmdplugins]]
+
+# Add new plugins
+vmd_install_extension liquify liquify_gui {Modeling/Build Molecular Liquid}
+
+# Import liquify_gui and liquify_cli into global namespace
+namespace import Liquify::*
 ```
-
-_to_
-
-```tcl
-set auto_path [linsert $auto_path 0 {C:\vmdplugins}]
-```
-
-(substitute `C:\vmdplugins` with your plugin directory location)
 
 After installing, the vmdplugins directory should look like this:
 
@@ -72,7 +72,6 @@ from the main menu.  After filling in the required information and parameters vi
 A command line interface is also provided through the Tcl proc `liquify_cli`. Usage information is provided by the `-help` argument, _i.e._ by typing the following into the VMD console (recommend to use VMDs Tk Console under _Extensions_):
   
 ```tcl
-namespace import Liquify::liquify_cli
 liquify_cli -help
 ```
 

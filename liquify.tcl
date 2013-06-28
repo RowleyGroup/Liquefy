@@ -51,9 +51,9 @@ proc Liquify::liquify_cli { args } {
 	Liquify::set_defaults
 	set usage "
 	
-Usage:  Liquify::liquify_cli args1 ?args2?
+Usage:  liquify_cli args1 ?args2?
 
-Help:	Liquify::liquify_cli -help
+Help:	liquify_cli -help
 
 Required args1:
   -pdb <molecule PDB file>
