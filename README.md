@@ -51,6 +51,11 @@ vmd_install_extension liquify liquify_gui {Modeling/Build Molecular Liquid}
 namespace import Liquify::*
 ```
 
+On Windows, you may also need to alter the "Start In" path in order for
+VMD to read the local vmd.rc file.  This can be found by right-clicking
+a VMD icon, selecting "Properties" and changing the path to your home
+directory ( `%USERPROFILE%` ).
+
 After installing, the vmdplugins directory should look like this:
 
 ```
