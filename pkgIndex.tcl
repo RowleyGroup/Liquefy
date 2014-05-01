@@ -8,4 +8,4 @@
 # script is sourced, the variable $dir must contain the
 # full path name of this file's directory.
 
-package ifneeded liquify 1.0 [list source [file join $dir liquify.tcl]]
+package ifneeded liquefy 1.0 [list source [file join $dir liquefy.tcl]]
