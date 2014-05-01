@@ -1,4 +1,4 @@
-Liquify Plugin for VMD
+Liquefy Plugin for VMD
 ==============================
 ---
 
@@ -10,8 +10,8 @@ __Linux / Mac OS X__
 To install:
 
 - Create a plugin folder for added plugins ( _e.g._ `~/vmdplugins`)
-- Copy the folder `liquify/` to plugin folder ( _e.g._ `~/vmdplugins/liquify/`)
-- Add the following lines to `~/.vmdrc` or copy the provided `liquify/vmdrc` file
+- Copy the folder `liquefy/` to plugin folder ( _e.g._ `~/vmdplugins/liquefy/`)
+- Add the following lines to `~/.vmdrc` or copy the provided `liquefy/vmdrc` file
   to `~/.vmdrc`
 
 ```tcl
@@ -22,10 +22,10 @@ menu main on
 set auto_path [linsert $auto_path 0 [file join $env(HOME) vmdplugins]]
 
 # Add new plugins
-vmd_install_extension liquify liquify_gui {Modeling/Build Molecular Liquid}
+vmd_install_extension liquefy liquefy_gui {Modeling/Build Molecular Liquid}
 
-# Import liquify_gui and liquify_cli into global namespace
-namespace import Liquify::*
+# Import liquefy_gui and liquefy_cli into global namespace
+namespace import Liquefy::*
 ```
 
 __Windows__
@@ -33,7 +33,7 @@ __Windows__
 To install:
 
 - Create a plugin folder for added plugins ( _e.g._ `C:\Users\My Name\vmdplugins` )
-- Copy the folder `liquify/` to plugin folder ( _e.g._ `vmdplugins\liquify` )
+- Copy the folder `liquefy/` to plugin folder ( _e.g._ `vmdplugins\liquefy` )
 - Add the following lines to the file `vmd.rc` in your home directory,
   or copy the provided `vmd.rc` file to your home directory.
 
@@ -45,10 +45,10 @@ menu main on
 set auto_path [linsert $auto_path 0 [file join $env(USERPROFILE) vmdplugins]]
 
 # Add new plugins
-vmd_install_extension liquify liquify_gui {Modeling/Build Molecular Liquid}
+vmd_install_extension liquefy liquefy_gui {Modeling/Build Molecular Liquid}
 
-# Import liquify_gui and liquify_cli into global namespace
-namespace import Liquify::*
+# Import liquefy_gui and liquefy_cli into global namespace
+namespace import Liquefy::*
 ```
 
 On Windows, you may also need to alter the "Start In" path in order for
@@ -60,8 +60,8 @@ After installing, the vmdplugins directory should look like this:
 
 ```
 vmdplugins/
-+-- liquify/
-|       +-- liquify.tcl
++-- liquefy/
+|       +-- liquefy.tcl
 |       +-- pkgIndex.tcl
 ```
 
@@ -74,16 +74,16 @@ _Extensions_ -> _Modeling_ -> _Build Molecular Liquid_
 
 from the main menu.  After filling in the required information and parameters via the graphical user interface, click the __Fill__ button to build the liquid.  The total number of molecules added as well as the density will be given in the __Results__ frame after it finishes.
 
-A command line interface is also provided through the Tcl proc `liquify_cli`. Usage information is provided by the `-help` argument, _i.e._ by typing the following into the VMD console (recommend to use VMDs Tk Console under _Extensions_):
+A command line interface is also provided through the Tcl proc `liquefy_cli`. Usage information is provided by the `-help` argument, _i.e._ by typing the following into the VMD console (recommend to use VMDs Tk Console under _Extensions_):
   
 ```tcl
-liquify_cli -help
+liquefy_cli -help
 ```
 
 For example, for a single molecule of benzene,
 
 ```tcl
-liquify_cli -pdb benzene.pdb -psf benzene.psf -top benzene.rtf -savefile benzene-liq
+liquefy_cli -pdb benzene.pdb -psf benzene.psf -top benzene.rtf -savefile benzene-liq
 ```
 
 creates three new files containing a random liquid structure for benzene
